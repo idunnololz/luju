@@ -1,0 +1,6 @@
+package ZZZ;
+
+public class simple1 {
+    protected int i;
+    simple1() {}
+}
