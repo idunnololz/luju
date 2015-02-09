@@ -15,7 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class LalrTable {
+public class ParseTable {
     private static final String LALR_TABLE_FILE = "luju/res/joos.lalr";
 
     private static final int SHIFT = 0x80000000;
@@ -30,7 +30,7 @@ public class LalrTable {
     private static final Map<Integer, Integer> actionMap = new HashMap<>();
     private static final Map<Integer, Integer> gotoMap = new HashMap<>();
 
-    public LalrTable() {
+    public ParseTable() {
         loadTableFromFile(LALR_TABLE_FILE);
     }
 

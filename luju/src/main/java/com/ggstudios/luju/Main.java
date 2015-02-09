@@ -1,11 +1,14 @@
 package com.ggstudios.luju;
 
 import com.ggstudios.utils.Print;
+import com.ggstudios.utils.TestSuite;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Main {
 
@@ -16,9 +19,9 @@ public class Main {
 
         if (args.length == 0) {
             a = new String[]{
-                    "-p",
                     "-t",
-                    TEST_DIR + "tok/simple1.joos"
+                    "-A",
+                    TEST_DIR + "tok/Interface1.java"
             };
         } else {
             a = args;
@@ -52,9 +55,15 @@ public class Main {
                     case 'p':
                         argList.flags |= ArgList.FLAG_PRINT_PARSE_TREE;
                         break;
+                    case 'T':
+                        argList.flags |= ArgList.FLAG_RUN_TESTS;
+                        break;
+                    case 'A':
+                        argList.flags |= ArgList.FLAG_PRINT_AST;
+                        break;
                 }
             } else {
-                argList.fileName = flag;
+                argList.fileNames.add(flag);
             }
         }
 
@@ -63,12 +72,17 @@ public class Main {
             return;
         }
 
-        LuJuCompiler compiler = new LuJuCompiler();
-        compiler.compileWith(argList);
+        if (argList.isRunTests()) {
+            TestSuite ts = new TestSuite();
+            ts.runTests();
+        } else {
+            LuJuCompiler compiler = new LuJuCompiler();
+            compiler.compileWith(argList);
+        }
     }
 
     private static void printUsage() {
-        Print.ln("usage: java luju [-t] [-p] input_file");
+        Print.ln("usage: java luju [-t] [-p] [-T] [-A] input_file_1 ...");
     }
 
     public static class ArgList {
@@ -79,8 +93,10 @@ public class Main {
 
         public static final int FLAG_PRINT_TOKENS       = 0x00010000;
         public static final int FLAG_PRINT_PARSE_TREE   = 0x00020000;
+        public static final int FLAG_RUN_TESTS          = 0x00040000;
+        public static final int FLAG_PRINT_AST          = 0x00080000;
 
-        public String fileName;
+        public List<String> fileNames = new ArrayList<>();
         public int flags = FLAG_ALL;
 
         public boolean isTokenizeEnabled() {
@@ -97,6 +113,14 @@ public class Main {
 
         public boolean isPrintParseTree() {
             return (flags & FLAG_PRINT_PARSE_TREE) != 0;
+        }
+
+        public boolean isRunTests() {
+            return (flags & FLAG_RUN_TESTS) != 0;
+        }
+
+        public boolean isPrintAst() {
+            return (flags & FLAG_PRINT_AST) != 0;
         }
     }
 }

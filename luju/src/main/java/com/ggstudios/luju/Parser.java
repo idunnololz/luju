@@ -3,6 +3,7 @@ package com.ggstudios.luju;
 import com.ggstudios.error.ParseException;
 import com.ggstudios.error.WeedException;
 import com.ggstudios.utils.ListUtils;
+import com.ggstudios.utils.ParserUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,17 +13,16 @@ import java.util.Set;
 import java.util.Stack;
 
 public class Parser {
-    private LalrTable table;
+    private ParseTable table;
 
     public Parser() {
-        table = new LalrTable();
+        table = new ParseTable();
     }
 
     public Node parse(FileNode fn) {
         List<Token> tokens = fn.getTokens();
         Node tree = generateSyntaxTree(tokens);
         blazeIt(fn, tree);
-
         return tree;
     }
 
@@ -50,7 +50,7 @@ public class Parser {
                     index++;
                 }
             } else if (table.isActionReduce(action)) {
-                LalrTable.LrProduction prod = table.getProduction(table.getActionId(action));
+                ParseTable.LrProduction prod = table.getProduction(table.getActionId(action));
                 Node n = new Node();
                 for (int i = 0; i < prod.rhs.length; i++) {
                     stack.pop();
@@ -72,164 +72,220 @@ public class Parser {
      * BLAZE IT WEEDER!
      */
     private void blazeIt(FileNode fn, Node tree) {
-        if (tree.t == null) {
-            switch (tree.prod.lhs) {
-                case LalrTable.NONT_INTERFACEDECLARATION: {
-                    // interfaceDeclaration -> optModifiers INTERFACE ID optExtendsInterfaces interfaceBody
-                    fn.setIsInterface(true);
-                    doInterfaceOrClassDeclCheck(fn, tree);
-                    break;
-                }
-                case LalrTable.NONT_CLASSDECLARATION: {
-                    // classDeclaration -> optModifiers CLASS ID optSuper optInterfaces classBody
-                    doInterfaceOrClassDeclCheck(fn, tree);
+        Stack<Node> toVisit = new Stack<Node>();
+        toVisit.push(tree);
 
-                    // need to check mods...
-                    Node mods = tree.children.get(0);
-                    List<Token> toks = getTokensInTree(mods);
+        boolean isClass = false;
+        boolean isInterface = false;
+        boolean hasConstructor = false;
+        Token classTok = null;
 
-                    // ensure no duplicate mods...
-                    Set<Token.Type> set = ensureNoDuplicate(toks);
+        while (!toVisit.isEmpty()) {
+            Node cur = toVisit.pop();
 
-                    if (set.contains(Token.Type.ABSTRACT) && set.contains(Token.Type.FINAL)) {
-                        Token t1 = getTokenWithType(toks, Token.Type.ABSTRACT);
-                        Token t2 = getTokenWithType(toks, Token.Type.FINAL);
-                        throw new WeedException(t1, String.format("Illegal combination of modifiers: '%s' and '%s'.",
-                                t1.getRaw(), t2.getRaw()));
+            if (cur.t == null) {
+                switch (cur.prod.lhs) {
+                    case ParseTable.NONT_INTERFACEDECLARATION: {
+                        // interfaceDeclaration -> optModifiers INTERFACE ID optExtendsInterfaces interfaceBody
+                        isInterface = true;
+                        doInterfaceOrClassDeclCheck(fn, cur);
+                        break;
                     }
+                    case ParseTable.NONT_CLASSDECLARATION: {
+                        // classDeclaration -> optModifiers CLASS ID optSuper optInterfaces classBody
+                        doInterfaceOrClassDeclCheck(fn, cur);
 
-                    if (!set.contains(Token.Type.PUBLIC) && !set.contains(Token.Type.PROTECTED)) {
-                        Token errTok = tree.children.get(2).t;
-                        throw new WeedException(errTok, String.format("Class '%s' must be either public or protected.", errTok.getRaw()));
-                    }
+                        isClass = true;
+                        classTok = cur.children.get(2).t;
 
-                    break;
-                }
-                case LalrTable.NONT_METHODDECLARATION: {
-                    // methodDeclaration -> methodHeader methodBody
-                    // methodHeader -> optModifiers VOID methodDeclarator
+                        // need to check mods...
+                        Node mods = cur.children.get(0);
+                        List<Token> toks = ParserUtils.getTokensInTree(mods);
 
-                    // need to check mods...
-                    Node mods = tree.children.get(0).children.get(0);
-                    List<Token> toks = getTokensInTree(mods);
+                        // ensure no duplicate mods...
+                        Set<Token.Type> set = ensureNoDuplicate(toks);
 
-                    // ensure no duplicate mods...
-                    Set<Token.Type> set = ensureNoDuplicate(toks);
-                    boolean isAbstract = set.contains(Token.Type.ABSTRACT);
-                    boolean isNative = set.contains(Token.Type.NATIVE);
-                    boolean isStatic = set.contains(Token.Type.STATIC);
-                    boolean isFinal = set.contains(Token.Type.FINAL);
-
-                    if (isAbstract || isNative) {
-                        // ensure has no body...
-                        // methodBody -> SEMI
-                        Node methBody = tree.children.get(1);
-                        int rhs = methBody.prod.rhs[0];
-                        if (rhs != Token.Type.SEMI.getValue()) {
-                            List<Token> errToks = getTokensInTree(methBody);
-                            Token t = errToks.get(0);
-                            throw new WeedException(t, "Abstract or native methods cannot have bodies.");
-                        }
-                    }
-
-                    if (isAbstract) {
-                        Token errTok = null;
-                        if (isStatic) {
-                            errTok = getTokenWithType(toks, Token.Type.STATIC);
-                        } else if (isFinal) {
-                            errTok = getTokenWithType(toks, Token.Type.FINAL);
+                        if (set.contains(Token.Type.ABSTRACT) && set.contains(Token.Type.FINAL)) {
+                            Token t1 = getTokenWithType(toks, Token.Type.ABSTRACT);
+                            Token t2 = getTokenWithType(toks, Token.Type.FINAL);
+                            throw new WeedException(t1, String.format("Illegal combination of modifiers: '%s' and '%s'.",
+                                    t1.getRaw(), t2.getRaw()));
                         }
 
-                        if (errTok != null) {
-                            throw new WeedException(errTok, String.format("Illegal combination of modifiers: 'abstract' and '%s'.",
-                                    errTok.getRaw()));
+                        if (!set.contains(Token.Type.PUBLIC) && !set.contains(Token.Type.PROTECTED)) {
+                            Token errTok = cur.children.get(2).t;
+                            throw new WeedException(errTok, String.format("Class '%s' must be either public or protected.", errTok.getRaw()));
                         }
-                    }
 
-                    if (isStatic && isFinal) {
-                        Token errTok = getTokenWithType(toks, Token.Type.STATIC);
-                        throw new WeedException(errTok, "Illegal combination of modifiers: 'abstract' and 'final'.");
+                        break;
                     }
+                    case ParseTable.NONT_METHODDECLARATION: {
+                        // methodDeclaration -> methodHeader methodBody
 
-                    if (isNative && !isStatic) {
-                        Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
-                        throw new WeedException(errTok, "A native method must be static.");
-                    }
+                        // need to check mods...
+                        Node mods = cur.children.get(0).children.get(0);
+                        List<Token> toks = ParserUtils.getTokensInTree(mods);
 
-                    if (fn.isInterface()) {
-                        if (isStatic) {
+                        // ensure no duplicate mods...
+                        Set<Token.Type> set = ensureNoDuplicate(toks);
+                        boolean isAbstract = set.contains(Token.Type.ABSTRACT);
+                        boolean isNative = set.contains(Token.Type.NATIVE);
+                        boolean isStatic = set.contains(Token.Type.STATIC);
+                        boolean isFinal = set.contains(Token.Type.FINAL);
+
+                        if (isAbstract || isNative) {
+                            // ensure has no body...
+                            // methodBody -> SEMI
+                            Node methBody = cur.children.get(1);
+                            int rhs = methBody.prod.rhs[0];
+                            if (rhs != Token.Type.SEMI.getValue()) {
+                                List<Token> errToks = ParserUtils.getTokensInTree(methBody);
+                                Token t = errToks.get(0);
+                                throw new WeedException(t, "Abstract or native methods cannot have bodies.");
+                            }
+                        }
+
+                        if (isAbstract) {
+                            Token errTok = null;
+                            if (isStatic) {
+                                errTok = getTokenWithType(toks, Token.Type.STATIC);
+                            } else if (isFinal) {
+                                errTok = getTokenWithType(toks, Token.Type.FINAL);
+                            }
+
+                            if (errTok != null) {
+                                throw new WeedException(errTok, String.format("Illegal combination of modifiers: 'abstract' and '%s'.",
+                                        errTok.getRaw()));
+                            }
+                        }
+
+                        if (isStatic && isFinal) {
                             Token errTok = getTokenWithType(toks, Token.Type.STATIC);
-                            throw new WeedException(errTok, "Interface method cannot be static.");
-                        } else if (isFinal) {
-                            Token errTok = getTokenWithType(toks, Token.Type.FINAL);
-                            throw new WeedException(errTok, "Interface method cannot be final.");
-                        } else if (isNative) {
-                            Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
-                            throw new WeedException(errTok, "Interface method cannot be native.");
+                            throw new WeedException(errTok, "Illegal combination of modifiers: 'static' and 'final'.");
                         }
+
+                        if (isNative && !isStatic) {
+                            Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
+                            throw new WeedException(errTok, "A native method must be static.");
+                        }
+
+                        if (isInterface) {
+                            if (isStatic) {
+                                Token errTok = getTokenWithType(toks, Token.Type.STATIC);
+                                throw new WeedException(errTok, "Interface method cannot be static.");
+                            } else if (isFinal) {
+                                Token errTok = getTokenWithType(toks, Token.Type.FINAL);
+                                throw new WeedException(errTok, "Interface method cannot be final.");
+                            } else if (isNative) {
+                                Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
+                                throw new WeedException(errTok, "Interface method cannot be native.");
+                            }
+                        }
+                        break;
                     }
-                    break;
-                }
-                case LalrTable.NONT_CONSTRUCTORDECLARATION: {
-                    // constructorDeclaration -> optModifiers constructorDeclarator block
-                    fn.setHasConstructor(true);
-                    break;
-                }
-                case LalrTable.NONT_CONSTRUCTORDECLARATOR: {
-                    // constructorDeclarator -> simpleName LPAREN optFormalParameterList RPAREN
-                    Node mods = tree.children.get(0);
-                    List<Token> toks = getTokensInTree(mods);
-                    if (!toks.get(0).getRaw().equals(fn.getClassName())) {
-                        throw new WeedException(toks.get(0), String.format("Invalid constructor name '%s'.", toks.get(0).getRaw()));
+                    case ParseTable.NONT_ABSTRACTMETHODDECLARATION: {
+                        // abstractMethodDeclaration -> methodHeader SEMI
+
+                        // need to check mods...
+                        Node mods = cur.children.get(0).children.get(0);
+                        List<Token> toks = ParserUtils.getTokensInTree(mods);
+
+                        // ensure no duplicate mods...
+                        Set<Token.Type> set = ensureNoDuplicate(toks);
+                        boolean isAbstract = set.contains(Token.Type.ABSTRACT);
+                        boolean isNative = set.contains(Token.Type.NATIVE);
+                        boolean isStatic = set.contains(Token.Type.STATIC);
+                        boolean isFinal = set.contains(Token.Type.FINAL);
+
+                        if (isInterface) {
+                            if (isStatic) {
+                                Token errTok = getTokenWithType(toks, Token.Type.STATIC);
+                                throw new WeedException(errTok, "Interface method cannot be static.");
+                            } else if (isFinal) {
+                                Token errTok = getTokenWithType(toks, Token.Type.FINAL);
+                                throw new WeedException(errTok, "Interface method cannot be final.");
+                            } else if (isNative) {
+                                Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
+                                throw new WeedException(errTok, "Interface method cannot be native.");
+                            }
+                        }
+                        break;
                     }
-                    break;
-                }
-                case LalrTable.NONT_FIELDDECLARATION: {
-                    // fieldDeclaration -> optModifiers type variableDeclarator SEMI
-
-                    // need to check mods...
-                    Node mods = tree.children.get(0);
-                    List<Token> toks = getTokensInTree(mods);
-
-                    // ensure no duplicate mods...
-                    Set<Token.Type> set = ensureNoDuplicate(toks);
-
-                    if (set.contains(Token.Type.FINAL)) {
-                        Token errTok = getTokenWithType(toks, Token.Type.FINAL);
-                        throw new WeedException(errTok, String.format("Illegal modifier: '%s'", errTok.getRaw()));
-                    } else if (!set.contains(Token.Type.PUBLIC) && !set.contains(Token.Type.PROTECTED)) {
-                        Token errTok = getTokensInTree(tree.children.get(2)).get(0);
-                        throw new WeedException(errTok, String.format("Field '%s' must be either public or protected.", errTok.getRaw()));
+                    case ParseTable.NONT_CONSTRUCTORDECLARATION: {
+                        // constructorDeclaration -> optModifiers constructorDeclarator block
+                        hasConstructor = true;
+                        break;
                     }
-                    break;
-                }
-                default:
-                    break;
-            }
-
-            for (Node child : tree.children) {
-                blazeIt(fn, child);
-            }
-
-
-            switch (tree.prod.lhs) {
-                case LalrTable.NONT_CLASSDECLARATION:
-                    if (!fn.hasConstructor()) {
-                        Token errTok = tree.children.get(2).t;
-                        throw new WeedException(errTok, String.format("Class '%s' must have at least on constructor.", errTok.getRaw()));
+                    case ParseTable.NONT_CONSTRUCTORDECLARATOR: {
+                        // constructorDeclarator -> simpleName LPAREN optFormalParameterList RPAREN
+                        Node mods = cur.children.get(0);
+                        List<Token> toks = ParserUtils.getTokensInTree(mods);
+                        if (!toks.get(0).getRaw().equals(fn.getClassName())) {
+                            throw new WeedException(toks.get(0), String.format("Invalid constructor name '%s'.", toks.get(0).getRaw()));
+                        }
+                        break;
                     }
-                    break;
-                default:
-                    break;
+                    case ParseTable.NONT_FIELDDECLARATION: {
+                        // fieldDeclaration -> optModifiers type variableDeclarator SEMI
+
+                        // need to check mods...
+                        Node mods = cur.children.get(0);
+                        List<Token> toks = ParserUtils.getTokensInTree(mods);
+
+                        // ensure no duplicate mods...
+                        Set<Token.Type> set = ensureNoDuplicate(toks);
+
+                        if (set.contains(Token.Type.FINAL)) {
+                            Token errTok = getTokenWithType(toks, Token.Type.FINAL);
+                            throw new WeedException(errTok, String.format("Illegal modifier: '%s'", errTok.getRaw()));
+                        } else if (!set.contains(Token.Type.PUBLIC) && !set.contains(Token.Type.PROTECTED)) {
+                            Token errTok = ParserUtils.getTokensInTree(cur.children.get(2)).get(0);
+                            throw new WeedException(errTok, String.format("Field '%s' must be either public or protected.", errTok.getRaw()));
+                        }
+                        break;
+                    }
+                    case ParseTable.NONT_CASTEXPRESSION: {
+                        // castExpression -> LPAREN expression RPAREN unaryExpressionNotPlusMinus
+
+                        // ensure expression in cast is a type...
+                        if (cur.prod.rhs[1] == ParseTable.NONT_EXPRESSION && !isTypeNode(cur.children.get(1))) {
+                            Token errTok = cur.children.get(0).t;
+                            throw new WeedException(errTok, "Invalid cast expression.");
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+
+                for (Node child : ListUtils.reverse(cur.children)) {
+                    toVisit.push(child);
+                }
             }
         }
+
+        if (isClass && !hasConstructor) {
+            Token errTok = classTok;
+            throw new WeedException(errTok, String.format("Class '%s' must have at least on constructor.", errTok.getRaw()));
+        }
+    }
+
+    private boolean isTypeNode(Node node) {
+        if (node.t == null) {
+            if (node.prod.lhs == ParseTable.NONT_NAME) {
+                return true;
+            } else if (node.children.size() == 1) {
+                return isTypeNode(node.children.get(0));
+            }
+        }
+        return false;
     }
 
     private void doInterfaceOrClassDeclCheck(FileNode fn, Node tree) {
         // interfaceDeclaration -> optModifiers INTERFACE   ID optExtendsInterfaces interfaceBody
         // classDeclaration     -> optModifiers CLASS       ID optSuper optInterfaces classBody
 
-        String type = tree.prod.lhs == LalrTable.NONT_CLASSDECLARATION ? "Class" : "Interface";
+        String type = tree.prod.lhs == ParseTable.NONT_CLASSDECLARATION ? "Class" : "Interface";
 
         Token id = tree.children.get(2).t;
         if (!fn.getFileClassName().equals(id.getRaw())) {
@@ -273,29 +329,10 @@ public class Parser {
         return null;
     }
 
-    private List<Token> getTokensInTree(Node tree) {
-        List<Token> toks = new ArrayList<>();
-        Stack<Node> toVisit = new Stack<>();
-        toVisit.push(tree);
-
-        while (!toVisit.isEmpty()) {
-            Node n = toVisit.pop();
-            if (n.t == null) {
-                for (Node child : ListUtils.reverse(n.children)) {
-                    toVisit.push(child);
-                }
-            } else {
-                toks.add(n.t);
-            }
-        }
-
-        return toks;
-    }
-
     public static class Node {
-        List<Node> children;
-        LalrTable.LrProduction prod;
-        Token t;
+        public List<Node> children;
+        ParseTable.LrProduction prod;
+        public Token t;
 
         Node() {
             children = new ArrayList<>();
@@ -317,11 +354,11 @@ public class Parser {
 
             if (t == null) {
                 sb.append("(Node (LrProduction ");
-                sb.append(LalrTable.getNameOfId(prod.lhs));
+                sb.append(ParseTable.getNameOfId(prod.lhs));
                 if (prod.rhs.length != 0) {
                     sb.append(" -> ");
                     for (int i : prod.rhs) {
-                        sb.append(LalrTable.getNameOfId(i));
+                        sb.append(ParseTable.getNameOfId(i));
                         sb.append(" ");
                     }
                     sb.setLength(sb.length() - 1);
@@ -351,11 +388,11 @@ public class Parser {
             if (t == null) {
                 StringBuilder sb = new StringBuilder();
                 sb.append("(Node (LrProduction ");
-                sb.append(LalrTable.getNameOfId(prod.lhs));
+                sb.append(ParseTable.getNameOfId(prod.lhs));
                 if (prod.rhs.length != 0) {
                     sb.append(" -> ");
                     for (int i : prod.rhs) {
-                        sb.append(LalrTable.getNameOfId(i));
+                        sb.append(ParseTable.getNameOfId(i));
                         sb.append(" ");
                     }
                     sb.setLength(sb.length() - 1);
