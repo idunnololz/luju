@@ -1,0 +1,8 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public abstract class BLAZE_native_meth {
+  native void c();
+  BLAZE_native_meth(){}
+}

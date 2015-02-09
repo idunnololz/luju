@@ -1,0 +1,10 @@
+package simple;
+
+import foo.bizz;
+
+public final class SimpleClass implements SimpleInterface {
+  public static int v = 7;
+  public static void main(String[] args) {
+    returns;
+  }
+}

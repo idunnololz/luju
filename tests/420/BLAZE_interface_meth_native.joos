@@ -1,0 +1,7 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public interface BLAZE_interface_meth_native {
+	native void b();
+}

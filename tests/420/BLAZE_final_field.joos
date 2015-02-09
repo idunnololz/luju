@@ -1,0 +1,9 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public abstract class BLAZE_final_field {
+	final int i = 10;
+	BLAZE_final_field(){
+	}
+}

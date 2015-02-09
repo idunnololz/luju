@@ -1,0 +1,2 @@
+public interface multipleIntExtends extends F, java.io.G, java.lang.E {
+}

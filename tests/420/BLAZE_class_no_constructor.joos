@@ -1,0 +1,10 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public class BLAZE_class_no_constructor {
+	void b();
+	void c();
+	void BLAZE_class_no_constructor();
+	BLAZE_class_no_constructor BLAZE_class_no_constructor();
+}

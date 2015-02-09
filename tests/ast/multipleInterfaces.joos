@@ -1,0 +1,3 @@
+public class multipleInterfaces extends B implements F, java.lang.G, java.io.E {
+  public multipleInterfaces() {}
+}

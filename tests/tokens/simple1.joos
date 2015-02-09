@@ -1,0 +1,21 @@
+package soandso.blah.deblah;
+
+import foo.bar.baz.biff;
+import organuta; import taco.salad;
+
+public final class simple1 extends OtherClass implements SomeInterface {
+  public static int var = 37;
+  public simple1() {
+  } 
+  public static void main(String[] args) {
+    java.util.Vector v = new java.util.Vector();
+    v.at(17)[34] = new java.lang.String();
+    String s = "foobar\"bazbiff";
+    int i = 37;
+    for (int i=0;i<20;i=i+1) {
+      printf(i);
+    }
+    while (true | false || true && false) {
+    }
+  }
+}

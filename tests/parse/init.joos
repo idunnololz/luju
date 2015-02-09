@@ -1,0 +1,5 @@
+abstract class C {
+  public void m() {
+    int i = 42;
+  }
+}

@@ -1,0 +1,9 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public abstract class BLAZE_cast1 {
+	BLAZE_cast1(){
+		int i = (A + 1) 3;
+	}
+}

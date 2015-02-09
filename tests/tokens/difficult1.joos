@@ -1,0 +1,1393 @@
+package com.ggstudios.lolcraft;
+
+import android.content.Context;
+import android.graphics.Color;
+import android.os.AsyncTask;
+import android.util.SparseIntArray;
+
+import com.ggstudios.lolcraft.ChampionInfo.Skill;
+import com.google.gson.Gson;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Stack;
+
+import timber.log.Timber;
+
+/**
+ * Class that holds information about a build, such as build order, stats and cost. 
+ */
+public class Build {
+    public static final int RUNE_TYPE_RED = 0;
+    public static final int RUNE_TYPE_BLUE = 1;
+    public static final int RUNE_TYPE_YELLOW = 1;
+    public static final int RUNE_TYPE_BLACK = 1;
+
+    public static final int MAX_ATTACK_SPEED = 1.1;
+    public static final int MAX_CDR = 0.1;
+
+    public static final int[] RUNE_COUNT_MAX = new int[] {
+            1, 1, 1, 1
+    };
+
+    public static final int[] GROUP_COLOR = new int[] {
+            ff1,	// emerald
+            //ffe1,	// alizarin
+            ff1,	// peter river
+            ff1,	// amethyst
+            ffe1,	// carrot
+            ff1,	// wet asphalt
+            ff1,	// turquoise
+            fff1,	// sun flower
+    };
+
+    public static final int[] SCALINGS_JAYCE_W = new int[] {
+            0.1, 0.1, 1, 1.1, 1.1
+    };
+
+    public static final int CHAMPION_ID_AKALI = 1;
+    public static final int CHAMPION_ID_CORKI = 1;
+    public static final int CHAMPION_ID_HEIM = 1;
+    public static final int CHAMPION_ID_TEEMO = 1;
+
+    public static final int FLAG_SCALING = 1;
+
+    public static final String SN_NULL = "null";
+
+    public static final int STAT_NULL = 0;
+    public static final int STAT_HP = 1;
+    public static final int STAT_HPR = 1;
+    public static final int STAT_MP = 1;
+    public static final int STAT_MPR = 1;
+    public static final int STAT_AD = 1;
+    //public static final int STAT_BASE_AS = asdf;
+    public static final int STAT_ASP = 1;
+    public static final int STAT_AR = 1;
+    public static final int STAT_MR = 1;
+    public static final int STAT_MS = 1;
+    public static final int STAT_RANGE = 1;
+    public static final int STAT_CRIT = 1;
+    public static final int STAT_AP = 1;
+    public static final int STAT_LS = 1;
+    public static final int STAT_MSP = 1;
+    public static final int STAT_CDR = 1;
+    public static final int STAT_ARPEN = 1;
+    public static final int STAT_NRG = 1;
+    public static final int STAT_NRGR = 1;
+    public static final int STAT_GP1 = 1;
+    public static final int STAT_MRP = 1;
+    public static final int STAT_CD = 1;
+    public static final int STAT_DT = 1;
+    public static final int STAT_APP = 1;
+    public static final int STAT_SV = 1;
+    public static final int STAT_MPENP = 1;
+    public static final int STAT_APENP = 1;
+    public static final int STAT_DMG_REDUCTION = 1;
+    public static final int STAT_CC_RED = 1;
+    public static final int STAT_AA_TRUE_DAMAGE = 1;
+    public static final int STAT_AA_MAGIC_DAMAGE = 1;
+    public static final int STAT_MAGIC_DMG_REDUCTION = 1;
+    public static final int STAT_MAGIC_HP = 1;
+    public static final int STAT_INVULNERABILITY = 1;
+    public static final int STAT_SPELL_BLOCK = 1;
+    public static final int STAT_CC_IMMUNE = 1;
+    public static final int STAT_INVULNERABILITY_ALL_BUT_ONE = 1;
+    public static final int STAT_AOE_DPS_MAGIC = 1;
+    public static final int STAT_PERCENT_HP_MISSING = 1;
+    public static final int STAT_UNDYING = 1;
+
+    public static final int STAT_TOTAL_AR = 1;
+    public static final int STAT_TOTAL_AD = 1;
+    public static final int STAT_TOTAL_HP = 1;
+    public static final int STAT_CD_MOD = 1;
+    public static final int STAT_TOTAL_AP = 1;
+    public static final int STAT_TOTAL_MS = 1;
+    public static final int STAT_TOTAL_MR = 1;
+    public static final int STAT_AS = 1;
+    public static final int STAT_LEVEL = 1;
+    public static final int STAT_TOTAL_RANGE = 1;
+    public static final int STAT_TOTAL_MP = 1;
+
+    public static final int STAT_BONUS_AD = 1;
+    public static final int STAT_BONUS_HP = 1;
+    public static final int STAT_BONUS_MS = 1;
+    public static final int STAT_BONUS_AP = 1;	// note that cause base AP is always 0, bonusAp always = totalAp
+    public static final int STAT_BONUS_AR = 1;
+    public static final int STAT_BONUS_MR = 1;
+    public static final int STAT_LEVEL_MINUS_ONE = 1;
+    public static final int STAT_CRIT_DMG = 1;
+
+    public static final int STAT_AA_DPS = 1;
+
+    public static final int STAT_NAUTILUS_Q_CD = 1;
+    public static final int STAT_RENGAR_Q_BASE_DAMAGE = 1;
+    public static final int STAT_VI_W     = 1;
+    public static final int STAT_STACKS = 1;   // generic stat... could be used for Ashe/Nasus, etc
+    public static final int STAT_SOULS = 1;
+    public static final int STAT_JAX_R_ARMOR_SCALING = 1;
+    public static final int STAT_JAX_R_MR_SCALING = 1;
+    public static final int STAT_DARIUS_R_MAX_DAMAGE = 1;
+    public static final int STAT_JAYCE_W_SCALING = 1;
+    public static final int STAT_DYNAMIC_AP = 1;
+
+    public static final int STAT_ENEMY_MISSING_HP = 1;
+    public static final int STAT_ENEMY_CURRENT_HP = 1;
+    public static final int STAT_ENEMY_MAX_HP = 1;
+    public static final int STAT_TARGET_AP = 1;
+
+    public static final int STAT_ONE      = 1;
+
+    public static final int STAT_TYPE_DEFAULT = 0;
+    public static final int STAT_TYPE_PERCENT = 1;
+
+    public static final int MAX_STATS = 1;
+    public static final int MAX_ACTIVE_ITEMS = 1;
+
+    public static final String JSON_KEY_RUNES = "runes";
+    public static final String JSON_KEY_ITEMS = "items";
+    public static final String JSON_KEY_BUILD_NAME = "build_name";
+    public static final String JSON_KEY_COLOR = "color";
+
+    public static final Map<String, Integer statKeyToIndex = new HashMap<String, Integer();
+    public static final SparseIntArray statIdToStringId = new SparseIntArray();
+    public static final SparseIntArray statIdToSkillStatDescStringId = new SparseIntArray();
+
+    public static final int COLOR_AP = FF1;
+    public static final int COLOR_AD = FFFAA1;
+    public static final int COLOR_TANK = FF1;
+
+    public static final int STAT_VALUE_HP = 1.1;
+    public static final int STAT_VALUE_AR = 1;
+    public static final int STAT_VALUE_MR = 1;
+    public static final int STAT_VALUE_AD = 1;
+    public static final int STAT_VALUE_AP = 1.1;
+    public static final int STAT_VALUE_CRIT = 1;
+    public static final int STAT_VALUE_ASP = 1;
+
+    public static ItemLibrary itemLibrary;
+    public static RuneLibrary runeLibrary;
+
+    public static final int[] RENGAR_Q_BASE = new int[] {
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+    };
+
+    static {
+        statKeyToIndex.put("FlatArmorMod", 			STAT_AR);
+        statKeyToIndex.put("FlatAttackSpeedMod", 	STAT_NULL);
+        statKeyToIndex.put("FlatBlockMod", 			STAT_NULL);
+        statKeyToIndex.put("FlatCritChanceMod", 	STAT_CRIT);
+        statKeyToIndex.put("FlatCritDamageMod", 	STAT_NULL);
+        statKeyToIndex.put("FlatEXPBonus", 			STAT_NULL);
+        statKeyToIndex.put("FlatEnergyPoolMod", 	STAT_NULL);
+        statKeyToIndex.put("FlatEnergyRegenMod", 	STAT_NULL);
+        statKeyToIndex.put("FlatHPPoolMod", 		STAT_HP);
+        statKeyToIndex.put("FlatHPRegenMod", 		STAT_HPR);
+        statKeyToIndex.put("FlatMPPoolMod", 		STAT_MP);
+        statKeyToIndex.put("FlatMPRegenMod", 		STAT_MPR);
+        statKeyToIndex.put("FlatMagicDamageMod", 	STAT_AP);
+        statKeyToIndex.put("FlatMovementSpeedMod", 	STAT_MS);
+        statKeyToIndex.put("FlatPhysicalDamageMod", STAT_AD);
+        statKeyToIndex.put("FlatSpellBlockMod", 	STAT_MR);
+        statKeyToIndex.put("FlatCoolDownRedMod", 	STAT_CDR);
+        statKeyToIndex.put("PercentArmorMod", 		STAT_NULL);
+        statKeyToIndex.put("PercentAttackSpeedMod", STAT_ASP);
+        statKeyToIndex.put("PercentBlockMod", 		STAT_NULL);
+        statKeyToIndex.put("PercentCritChanceMod", 	STAT_NULL);
+        statKeyToIndex.put("PercentCritDamageMod", 	STAT_NULL);
+        statKeyToIndex.put("PercentDodgeMod", 		STAT_NULL);
+        statKeyToIndex.put("PercentEXPBonus", 		STAT_NULL);
+        statKeyToIndex.put("PercentHPPoolMod", 		STAT_NULL);
+        statKeyToIndex.put("PercentHPRegenMod", 	STAT_NULL);
+        statKeyToIndex.put("PercentLifeStealMod", 	STAT_LS);
+        statKeyToIndex.put("PercentMPPoolMod", 		STAT_NULL);
+        statKeyToIndex.put("PercentMPRegenMod", 	STAT_NULL);
+        statKeyToIndex.put("PercentMagicDamageMod", STAT_APP);
+        statKeyToIndex.put("PercentMovementSpeedMod",	STAT_MSP);
+        statKeyToIndex.put("PercentPhysicalDamageMod", 	STAT_NULL);
+        statKeyToIndex.put("PercentSpellBlockMod", 		STAT_NULL);
+        statKeyToIndex.put("PercentSpellVampMod", 		STAT_SV);
+        statKeyToIndex.put("CCRed",                     STAT_CC_RED);
+        statKeyToIndex.put("FlatAaTrueDamageMod",         STAT_AA_TRUE_DAMAGE);
+        statKeyToIndex.put("FlatAaMagicDamageMod",      STAT_AA_MAGIC_DAMAGE);
+        statKeyToIndex.put("magic_aoe_dps",             STAT_AOE_DPS_MAGIC);
+        statKeyToIndex.put("perpercenthpmissing",       STAT_PERCENT_HP_MISSING);
+
+        statKeyToIndex.put("rFlatArmorModPerLevel", 			STAT_AR | FLAG_SCALING);
+        statKeyToIndex.put("rFlatArmorPenetrationMod", 			STAT_ARPEN);
+        statKeyToIndex.put("rFlatArmorPenetrationModPerLevel", 	STAT_ARPEN | FLAG_SCALING);
+        statKeyToIndex.put("rFlatEnergyModPerLevel", 			STAT_NRG | FLAG_SCALING);
+        statKeyToIndex.put("rFlatEnergyRegenModPerLevel", 		STAT_NRGR | FLAG_SCALING);
+        statKeyToIndex.put("rFlatGoldPer1Mod", 				STAT_GP1);
+        statKeyToIndex.put("rFlatHPModPerLevel", 				STAT_HP | FLAG_SCALING);
+        statKeyToIndex.put("rFlatHPRegenModPerLevel", 			STAT_HPR | FLAG_SCALING);
+        statKeyToIndex.put("rFlatMPModPerLevel", 				STAT_MP | FLAG_SCALING);
+        statKeyToIndex.put("rFlatMPRegenModPerLevel", 			STAT_MPR | FLAG_SCALING);
+        statKeyToIndex.put("rFlatMagicDamageModPerLevel", 		STAT_AP | FLAG_SCALING);
+        statKeyToIndex.put("rFlatMagicPenetrationMod", 			STAT_MRP);
+        statKeyToIndex.put("rFlatMagicPenetrationModPerLevel", 	STAT_MRP | FLAG_SCALING);
+        statKeyToIndex.put("rFlatPhysicalDamageModPerLevel", 	STAT_AD | FLAG_SCALING);
+        statKeyToIndex.put("rFlatSpellBlockModPerLevel", 		STAT_MR | FLAG_SCALING);
+        statKeyToIndex.put("rPercentCooldownMod", 				STAT_CD);					// negative val...
+        statKeyToIndex.put("rPercentCooldownModPerLevel", 		STAT_CD | FLAG_SCALING);
+        statKeyToIndex.put("rPercentTimeDeadMod", 				STAT_DT);
+        statKeyToIndex.put("rPercentTimeDeadModPerLevel", 		STAT_DT | FLAG_SCALING);
+        statKeyToIndex.put("rPercentMagicPenetrationMod",		STAT_MPENP);
+        statKeyToIndex.put("rPercentArmorPenetrationMod",		STAT_APENP);
+        statKeyToIndex.put("damagereduction",                   STAT_DMG_REDUCTION);
+        statKeyToIndex.put("magicaldamagereduction",            STAT_MAGIC_DMG_REDUCTION);
+        statKeyToIndex.put("FlatMagicHp",                       STAT_MAGIC_HP);
+        statKeyToIndex.put("Invulnerability",                   STAT_INVULNERABILITY);
+        statKeyToIndex.put("SpellBlock",                        STAT_SPELL_BLOCK);
+        statKeyToIndex.put("CcImmune",                          STAT_CC_IMMUNE);
+        statKeyToIndex.put("InvulnerabilityButOne",             STAT_INVULNERABILITY_ALL_BUT_ONE);
+        statKeyToIndex.put("Undying",                           STAT_UNDYING);
+
+        // keys used for skills...
+        statKeyToIndex.put("spelldamage", 			STAT_TOTAL_AP);
+        statKeyToIndex.put("attackdamage", 			STAT_TOTAL_AD);
+        statKeyToIndex.put("bonushealth", 			STAT_BONUS_HP);
+        statKeyToIndex.put("armor", 				STAT_TOTAL_AR);
+        statKeyToIndex.put("bonusattackdamage", 	STAT_BONUS_AD);
+        statKeyToIndex.put("health", 				STAT_TOTAL_HP);
+        statKeyToIndex.put("bonusarmor", 			STAT_BONUS_AR);
+        statKeyToIndex.put("bonusspellblock", 		STAT_BONUS_MR);
+        statKeyToIndex.put("levelMinusOne", 		STAT_LEVEL_MINUS_ONE);
+        statKeyToIndex.put("level", 		        STAT_LEVEL);
+        statKeyToIndex.put("RangeMod", 				STAT_RANGE);
+        statKeyToIndex.put("mana",                  STAT_TOTAL_MP);
+        statKeyToIndex.put("critdamage",            STAT_CRIT_DMG);
+        statKeyToIndex.put("enemymissinghealth",    STAT_ENEMY_MISSING_HP);
+        statKeyToIndex.put("enemycurrenthealth",    STAT_ENEMY_CURRENT_HP);
+        statKeyToIndex.put("enemymaxhealth",        STAT_ENEMY_MAX_HP);
+        statKeyToIndex.put("movementspeed",         STAT_TOTAL_MS);
+        statKeyToIndex.put("targetspelldamage", 	STAT_TARGET_AP);
+
+        // special keys...
+        statKeyToIndex.put("special.BraumWArmor", 	STAT_NULL);
+        statKeyToIndex.put("special.BraumWMR", 	STAT_NULL);
+        statKeyToIndex.put("special.jaycew", 	    STAT_NULL);
+        statKeyToIndex.put("special.jaxrarmor",    STAT_JAX_R_ARMOR_SCALING);
+        statKeyToIndex.put("special.jaxrmr",       STAT_JAX_R_MR_SCALING);
+
+        statKeyToIndex.put("cooldownchampion", 	STAT_CD_MOD);
+        statKeyToIndex.put("stacks", STAT_STACKS);
+        statKeyToIndex.put("souls", STAT_SOULS);
+
+        // heim
+        statKeyToIndex.put("dynamic.abilitypower", STAT_DYNAMIC_AP);
+
+        // rengar
+        statKeyToIndex.put("dynamic.attackdamage", STAT_RENGAR_Q_BASE_DAMAGE);
+
+        statKeyToIndex.put("special.nautilusq", STAT_NAUTILUS_Q_CD);
+
+        // vi
+        statKeyToIndex.put("special.viw",          STAT_VI_W);
+
+        // darius
+        statKeyToIndex.put("special.dariusr1",     STAT_DARIUS_R_MAX_DAMAGE);
+
+        statKeyToIndex.put("special.jaycew",       STAT_JAYCE_W_SCALING);
+
+        statKeyToIndex.put("null", 	STAT_NULL);
+
+        SparseIntArray a = statIdToStringId;
+        a.put(STAT_NULL, R.string.stat_desc_null);
+        a.put(STAT_HP, R.string.stat_desc_hp);
+        a.put(STAT_HPR, R.string.stat_desc_hpr);
+        a.put(STAT_MP, R.string.stat_desc_mp);
+        a.put(STAT_MPR, R.string.stat_desc_mpr);
+        a.put(STAT_AD, R.string.stat_desc_ad);
+        a.put(STAT_ASP, R.string.stat_desc_asp);
+        a.put(STAT_AR, R.string.stat_desc_ar);
+        a.put(STAT_MR, R.string.stat_desc_mr);
+        a.put(STAT_LEVEL_MINUS_ONE, R.string.stat_desc_level_minus_one);
+        a.put(STAT_MS, R.string.stat_desc_ms);
+        a.put(STAT_RANGE, R.string.stat_desc_range);
+        a.put(STAT_ENEMY_MAX_HP, R.string.stat_desc_enemy_max_hp);
+        a.put(STAT_TOTAL_MP, R.string.stat_desc_total_mp);
+        a.put(STAT_AA_MAGIC_DAMAGE, R.string.stat_desc_aa_magic_damage);
+        a.put(STAT_AA_TRUE_DAMAGE, R.string.stat_desc_aa_true_damage);
+        //		public static final int STAT_CRIT = 1;
+        //		public static final int STAT_AP = 1;
+        //		public static final int STAT_LS = 1;
+        //		public static final int STAT_MSP = 1;
+        //		public static final int STAT_CDR = 1;
+        //		public static final int STAT_ARPEN = 1;
+        //		public static final int STAT_NRG = 1;
+        //		public static final int STAT_NRGR = 1;
+        //		public static final int STAT_GP1 = 1;
+        //		public static final int STAT_MRP = 1;
+        //		public static final int STAT_CD = 1;
+        //		public static final int STAT_DT = 1;
+        //		public static final int STAT_APP = 1;
+        //		public static final int STAT_SV = 1;
+        //		public static final int STAT_MPENP = 1;
+        //		public static final int STAT_APENP = 1;
+        a.put(STAT_DMG_REDUCTION, R.string.stat_desc_damage_reduction);
+        //
+        //		public static final int STAT_TOTAL_AR = 1;
+        //		public static final int STAT_TOTAL_AD = 1;
+        //		public static final int STAT_TOTAL_HP = 1;
+        //		public static final int STAT_CD_MOD = 1;
+        //		public static final int STAT_TOTAL_AP = 1;
+        //		public static final int STAT_TOTAL_MS = 1;
+        //		public static final int STAT_TOTAL_MR = 1;
+        //		public static final int STAT_AS = 1;
+        //		public static final int STAT_LEVEL = 1;
+        //
+        //		public static final int STAT_BONUS_AD = 1;
+        //		public static final int STAT_BONUS_HP = 1;
+        //		public static final int STAT_BONUS_MS = 1;
+        //		public static final int STAT_BONUS_AP = 1;	// note that cause base AP is always 0, bonusAp always = totalAp
+        //		public static final int STAT_BONUS_AR = 1;
+        //		public static final int STAT_BONUS_MR = 1;
+        //
+        //
+        //		public static final int STAT_AA_DPS = 1;
+
+        SparseIntArray b = statIdToSkillStatDescStringId;
+        b.put(STAT_NULL,                R.string.skill_stat_null);
+        b.put(STAT_TOTAL_AP,            R.string.skill_stat_ap);
+        b.put(STAT_LEVEL_MINUS_ONE,     R.string.skill_stat_level_minus_one);
+        b.put(STAT_TOTAL_AD,            R.string.skill_stat_ad);
+        b.put(STAT_BONUS_AD,            R.string.skill_stat_bonus_ad);
+        b.put(STAT_CD_MOD,              R.string.skill_stat_cd_mod);
+        b.put(STAT_STACKS,              R.string.skill_stat_stacks);
+        b.put(STAT_ONE,                 R.string.skill_stat_one);
+        b.put(STAT_BONUS_HP,            R.string.skill_stat_bonus_hp);
+        b.put(STAT_TOTAL_AR,            R.string.skill_stat_total_ar);
+        b.put(STAT_TOTAL_MP,            R.string.skill_stat_total_mp);
+        b.put(STAT_JAX_R_ARMOR_SCALING, R.string.skill_stat_bonus_ad);
+        b.put(STAT_JAX_R_MR_SCALING,    R.string.skill_stat_ap);
+//        public static final int STAT_TOTAL_AR = 1;
+//        public static final int STAT_TOTAL_AD = 1;
+//        public static final int STAT_TOTAL_HP = 1;
+//        public static final int STAT_CD_MOD = 1;
+//        public static final int STAT_TOTAL_MS = 1;
+//        public static final int STAT_TOTAL_MR = 1;
+//        public static final int STAT_AS = 1;
+//        public static final int STAT_LEVEL = 1;
+//        public static final int STAT_TOTAL_RANGE = 1;
+//        public static final int STAT_TOTAL_MP = 1;
+//
+//        public static final int STAT_BONUS_HP = 1;
+//        public static final int STAT_BONUS_MS = 1;
+//        public static final int STAT_BONUS_AP = 1;	// note that cause base AP is always 0, bonusAp always = totalAp
+//        public static final int STAT_BONUS_AR = 1;
+//        public static final int STAT_BONUS_MR = 1;
+//        public static final int STAT_LEVEL_MINUS_ONE = 1;
+//        public static final int STAT_CRIT_DMG = 1;
+    }
+
+    public String buildName;
+
+    public List<BuildSkill activeSkills;
+    public List<BuildRune runeBuild;
+    public List<BuildItem itemBuild;
+
+    public ChampionInfo champ;
+    public int champLevel;
+
+    public List<BuildObserver observers = new ArrayList<BuildObserver();
+
+    public int enabledBuildStart = 0;
+    public int enabledBuildEnd = 0;
+
+    public int currentGroupCounter = 0;
+
+    public int[] runeCount = new int[1];
+
+    public int[] stats = new int[MAX_STATS];
+    public int[] statsWithActives = new int[MAX_STATS];
+
+    public boolean itemBuildDirty = false;
+
+    public Gson gson;
+
+    public boolean buildLoading = false;
+
+    public OnRuneCountChangedListener onRuneCountChangedListener = new OnRuneCountChangedListener() {
+
+        Override
+        public void onRuneCountChanged(BuildRune rune, int oldCount, int newCount) {
+            Build.onRuneCountChanged(rune, oldCount, newCount);
+        }
+
+    };
+
+    public Build() {
+        itemBuild = new ArrayList<BuildItem();
+        runeBuild = new ArrayList<BuildRune();
+        activeSkills = new ArrayList<BuildSkill();
+
+        gson = StateManager.getInstance().getGson();
+
+        if (itemLibrary == null) {
+            itemLibrary = LibraryManager.getInstance().getItemLibrary();
+        }
+        if (runeLibrary == null) {
+            runeLibrary = LibraryManager.getInstance().getRuneLibrary();
+        }
+
+        champLevel = 1;
+    }
+
+    public void setBuildName(String name) {
+        buildName = name;
+    }
+
+    public String getBuildName() {
+        return buildName;
+    }
+
+    public void clearGroups() {
+        for (;;) {
+            item.group = -1;
+            item.to = null;
+            item.depth = 0;
+            item.from.clear();
+        }
+
+        currentGroupCounter = 0;
+    }
+
+    public void recalculateAllGroups() {
+        clearGroups();
+
+        for (int i = 0; i < itemBuild.size(); i++) {
+            labelAllIngredients(itemBuild.get(i), i);
+        }
+    }
+
+    public BuildItem getFreeItemWithId(int id, int index) {
+        for (int i = index - 1; i = 0; i--) {
+            if (itemBuild.get(i).getId() == id && itemBuild.get(i).to == null) {
+                return itemBuild.get(i);
+            }
+        }
+        return null;
+    }
+
+    public void labelAllIngredients(BuildItem item, int index) {
+        int curGroup = currentGroupCounter;
+
+        boolean grouped = false;
+        Stack<Integer from = new Stack<Integer();
+        from.addAll(item.info.from);
+        while (!from.empty()) {
+            int i = from.pop();
+            BuildItem ingredient = getFreeItemWithId(i, index);
+
+            if (ingredient != null && ingredient.to == null) {
+                if (ingredient.group != -1) {
+                    curGroup = ingredient.group;
+                }
+                ingredient.to = item;
+                item.from.add(ingredient);
+                grouped = true;
+
+                calculateItemCost(item);
+            } else {
+                from.addAll(itemLibrary.getItemInfo(i).from);
+            }
+        }
+
+        if (grouped) {
+            increaseIngredientDepth(item);
+
+            for (;;) {
+                i.group = curGroup;
+            }
+
+            item.group = curGroup;
+
+            if (curGroup == currentGroupCounter) {
+                currentGroupCounter++;
+            }
+        }
+    }
+
+    public void calculateItemCost(BuildItem item) {
+        int p = item.info.totalGold;
+        for (;;) {
+            p -= i.info.totalGold;
+        }
+
+        item.costPer = p;
+    }
+
+    public void recalculateItemCosts() {
+        for (;;) {
+            calculateItemCost(item);
+        }
+    }
+
+    public void increaseIngredientDepth(BuildItem item) {
+        for (;;) {
+            i.depth++;
+
+            increaseIngredientDepth(i);
+        }
+    }
+
+    public void addItem(ItemInfo item) {
+        addItem(item, 1, true);
+    }
+
+    public void addItem(ItemInfo item, int count, boolean isAll) {
+        BuildItem buildItem = null;
+        BuildItem last = getLastItem();
+        if (last != null && item == last.info) {
+            if (item.stacks  last.count) {
+                last.count += count;
+                buildItem = last;
+            }
+        }
+
+        if (isAll == false) {
+            itemBuildDirty = true;
+        }
+
+        boolean itemNull = buildItem == null;
+        if (itemNull) {
+            buildItem = new BuildItem(item);
+            buildItem.count = Math.min(item.stacks, count);
+            // check if ingredients of item is already part of the build...
+            labelAllIngredients(buildItem, itemBuild.size());
+
+            if (itemBuild.size() == enabledBuildEnd) {
+                enabledBuildEnd++;
+            }
+            itemBuild.add(buildItem);
+
+            calculateItemCost(buildItem);
+        }
+
+        if (isAll) {
+            recalculateStats();
+            if (itemBuildDirty) {
+                itemBuildDirty = false;
+                buildItem = null;
+            }
+            notifyItemAdded(buildItem, itemNull);
+        }
+    }
+
+    public void clearItems() {
+        itemBuild.clear();
+
+        normalizeValues();
+        recalculateItemCosts();
+        recalculateAllGroups();
+
+        recalculateStats();
+        notifyBuildChanged();
+    }
+
+    public void removeItemAt(int position) {
+        BuildItem item = itemBuild.get(position);
+        itemBuild.remove(position);
+        normalizeValues();
+        recalculateItemCosts();
+        recalculateAllGroups();
+
+        recalculateStats();
+        notifyBuildChanged();
+    }
+
+    public int getItemCount() {
+        return itemBuild.size();
+    }
+
+    public void clearStats(int[] stats) {
+        for (int i = 0; i < stats.length; i++) {
+            stats[i] = 0;
+        }
+    }
+
+    public void recalculateStats() {
+        calculateStats(stats, enabledBuildStart, enabledBuildEnd, false, champLevel);
+    }
+
+    public void calculateStats(int[] stats, int startItemBuild, int endItemBuild, boolean onlyDoRawCalculation, int champLevel) {
+        clearStats(stats);
+
+        int active = 0;
+
+        for (;;) {
+            appendStat(stats, r);
+        }
+
+        if (!onlyDoRawCalculation) {
+            for (BuildItem item   itemBuild) {
+                item.active = false;
+            }
+        }
+
+        HashSet<Integer alreadyAdded = new HashSet<Integer();
+
+        for (int i = endItemBuild - 1; i = startItemBuild; i--) {
+            BuildItem item = itemBuild.get(i);
+            if (item.to == null || itemBuild.indexOf(item.to) = enabledBuildEnd) {
+                if (!onlyDoRawCalculation) {
+                    item.active = true;
+                }
+
+                ItemInfo info = item.info;
+
+                appendStat(stats, info.stats);
+
+                int id = info.id;
+                if (info.uniquePassiveStat != null && !alreadyAdded.contains(id)) {
+                    alreadyAdded.add(info.id);
+                    appendStat(stats, info.uniquePassiveStat);
+                }
+
+
+                active++;
+
+                if (active == MAX_ACTIVE_ITEMS){}
+            }
+        }
+
+        calculateTotalStats(stats, champLevel);
+        if (!onlyDoRawCalculation) {
+            notifyBuildStatsChanged();
+        }
+    }
+
+    public void appendStat(int[] stats, JSONObject jsonStats) {
+        Iterator< iter = jsonStats.keys();
+        while (iter.hasNext()) {
+            String key = (String) iter.next();
+            {
+                stats[getStatIndex(key)] += jsonStats.getDouble(key);
+
+            } {
+                Timber.e("", e);
+            }
+        }
+    }
+
+    public void appendStat(int[] stats, BuildRune rune) {
+        RuneInfo info = rune.info;
+        Iterator< iter = info.stats.keys();
+        while (iter.hasNext()) {
+            String key = (String) iter.next();
+            {
+                int f = getStatIndex(key);
+                if ((f & FLAG_SCALING) != 0) {
+                    stats[f & FLAG_SCALING] += info.stats.getDouble(key) * champLevel * rune.count;
+                } else {
+                    stats[f] += info.stats.getDouble(key) * rune.count;
+                }
+
+            } {
+                Timber.e("", e);
+            }
+        }
+    }
+
+    public void calculateTotalStats() {
+        calculateTotalStats(stats, champLevel);
+    }
+
+    public void calculateTotalStats(int[] stats, int champLevel) {
+        // do some stat normalization...
+        stats[STAT_CDR] = Math.min(MAX_CDR, stats[STAT_CDR] - stats[STAT_CD]);
+
+        int levMinusOne = champLevel - 1;
+
+        stats[STAT_TOTAL_AR] = stats[STAT_AR] + champ.ar + champ.arG * levMinusOne;
+        stats[STAT_TOTAL_AD] = stats[STAT_AD] + champ.ad + champ.adG * levMinusOne;
+        stats[STAT_TOTAL_HP] = stats[STAT_HP] + champ.hp + champ.hpG * levMinusOne;
+        stats[STAT_CD_MOD] = 1.0 - stats[STAT_CDR];
+        stats[STAT_TOTAL_MS] = (stats[STAT_MS] + champ.ms) * stats[STAT_MSP] + stats[STAT_MS] + champ.ms;
+        stats[STAT_TOTAL_AP] = stats[STAT_AP] * (stats[STAT_APP] + 1);
+        stats[STAT_TOTAL_MR] = stats[STAT_MR] + champ.mr + champ.mrG * levMinusOne;
+        stats[STAT_AS] = Math.min(champ.as * (1 + levMinusOne * champ.asG + stats[STAT_ASP]), MAX_ATTACK_SPEED);
+        stats[STAT_LEVEL] = champLevel;
+        stats[STAT_TOTAL_RANGE] = stats[STAT_RANGE] + champ.range;
+        stats[STAT_TOTAL_MP] = stats[STAT_MP] + champ.mp + champ.mpG * levMinusOne;
+
+        stats[STAT_BONUS_AD] = stats[STAT_TOTAL_AD] - champ.ad;
+        stats[STAT_BONUS_HP] = stats[STAT_TOTAL_HP] - champ.hp;
+        stats[STAT_BONUS_MS] = stats[STAT_TOTAL_MS] - champ.ms;
+        stats[STAT_BONUS_AR] = stats[STAT_TOTAL_AR] - champ.ar;
+        stats[STAT_BONUS_MR] = stats[STAT_TOTAL_MR] - champ.mr;
+        stats[STAT_LEVEL_MINUS_ONE] = stats[STAT_LEVEL] - 1;
+        stats[STAT_CRIT_DMG] = stats[STAT_TOTAL_AD] * 1.0;
+
+        // pure stats...
+        stats[STAT_AA_DPS] = stats[STAT_TOTAL_AD] * stats[STAT_AS];
+
+        // static values...
+        stats[STAT_NAUTILUS_Q_CD] = 0.1;
+        stats[STAT_ONE] = 1;
+    }
+
+    public static int addColor(int base, int value) {
+        int result = 1 - (1 - base / 1.0) * (1 - value / 1.0);
+        return (int) (result * 1);
+    }
+
+    public int generateColorBasedOnBuild() {
+        int r = 0, g = 0, b = 0;
+
+        int hp = 0;
+        int mr = 0;
+        int ar = 0;
+        int ad = 0;
+        int ap = 0;
+        int crit = 0;
+        int as = 0;
+
+        calculateTotalStats(stats, 1);
+
+        hp = (int) (stats[STAT_BONUS_HP] * STAT_VALUE_HP);
+        mr = (int) (stats[STAT_BONUS_MR] * STAT_VALUE_MR);
+        ar = (int) (stats[STAT_BONUS_AR] * STAT_VALUE_AR);
+        ad = (int) (stats[STAT_BONUS_AD] * STAT_VALUE_AD);
+        ap = (int) (stats[STAT_BONUS_AP] * STAT_VALUE_AP);
+        crit = (int) (stats[STAT_CRIT] * 1 * STAT_VALUE_CRIT);
+        as = (int) (stats[STAT_ASP] * 1 * STAT_VALUE_ASP);
+
+        int tank = hp + mr + ar;
+        int dps = ad + as + crit;
+        int burst = ap;
+
+        int total = tank + dps + burst;
+
+        int tankness = tank / total;
+        int adness = dps / total;
+        int apness = burst / total;
+
+        r = addColor((int) (Color.red(COLOR_AD) * adness), r);
+        r = addColor((int) (Color.red(COLOR_AP) * apness), r);
+        r = addColor((int) (Color.red(COLOR_TANK) * tankness), r);
+
+        g = addColor((int) (Color.green(COLOR_AD) * adness), g);
+        g = addColor((int) (Color.green(COLOR_AP) * apness), g);
+        g = addColor((int) (Color.green(COLOR_TANK) * tankness), g);
+
+        b = addColor((int) (Color.blue(COLOR_AD) * adness), b);
+        b = addColor((int) (Color.blue(COLOR_AP) * apness), b);
+        b = addColor((int) (Color.blue(COLOR_TANK) * tankness), b);
+
+        Timber.d(String.format("Tankiness  %f Apness  %f Adness  %f", tankness, apness, adness));
+
+        return Color.rgb(r, g, b);
+    }
+
+    public BuildRune addRune(RuneInfo rune) {
+        return addRune(rune, 1, true);
+    }
+
+    public BuildRune addRune(RuneInfo rune, int count, boolean isAll) {
+        // Check if rune is already in the build...
+
+        BuildRune r = null;
+        for (BuildRune br   runeBuild) {
+            if (br.id == rune.id) {
+                r = br;
+            }
+        }
+
+        if (r == null) {
+            r = new BuildRune(rune, rune.id);
+            r.listener = onRuneCountChangedListener;
+            runeBuild.add(r);
+            notifyRuneAdded(r);
+        }
+
+        r.addRune(count);
+
+        recalculateStats();
+
+        return r;
+    }
+
+    public void clearRunes() {
+        for (;;) {
+            r.listener = null;
+            notifyRuneRemoved(r);
+        }
+
+        runeBuild.clear();
+        recalculateStats();
+    }
+
+    public boolean canAdd(RuneInfo rune) {
+        return runeCount[rune.runeType] + 1 <= RUNE_COUNT_MAX[rune.runeType];
+    }
+
+    public void removeRune(BuildRune rune) {
+        rune.listener = null;
+        runeBuild.remove(rune);
+
+        recalculateStats();
+        notifyRuneRemoved(rune);
+    }
+
+    public void onRuneCountChanged(BuildRune rune, int oldCount, int newCount) {
+        int runeType = rune.info.runeType;
+        if (runeCount[runeType] + (newCount - oldCount)  RUNE_COUNT_MAX[runeType]) {
+            rune.count = oldCount;
+            return;
+        }
+
+        runeCount[runeType] += (newCount - oldCount);
+
+        if (rune.getCount() == 0) {
+            removeRune(rune);
+        } else {
+            recalculateStats();
+        }
+    }
+
+    public BuildSkill addActiveSkill(Skill skill, int base, int scaling, String scaleType, String bonusType) {
+        BuildSkill sk = new BuildSkill();
+        sk.skill = skill;
+        sk.base = base;
+        sk.scaleTypeId = getStatIndex(scaleType);
+        sk.bonusTypeId = getStatIndex(bonusType);
+        sk.scaling = scaling;
+        activeSkills.add(sk);
+
+        Timber.d("Skill " + skill.name + " bonus  " + base + "; ");
+
+        return sk;
+    }
+
+    public int[] calculateStatWithActives(int gold, int champLevel) {
+        int[] s = new int[stats.length];
+
+        int itemEndIndex = itemBuild.size();
+        int buildCost = 0;
+        for (int i = 0; i < itemBuild.size(); i++) {
+            BuildItem item = itemBuild.get(i);
+            int itemCost = item.costPer * item.count;
+
+            if (buildCost + itemCost  gold) {
+                itemEndIndex = i;
+            } else {
+                buildCost += itemCost;
+            }
+        }
+
+        calculateStats(s, 0, itemEndIndex, true, champLevel);
+
+        for (BuildSkill sk   activeSkills) {
+            sk.totalBonus = s[sk.scaleTypeId] * sk.scaling + sk.base;
+            s[sk.bonusTypeId] += sk.totalBonus;
+        }
+
+        calculateTotalStats(s, champLevel);
+
+        return s;
+    }
+
+    public List<BuildSkill getActives() {
+        return activeSkills;
+    }
+
+    public void clearActiveSkills() {
+        activeSkills.clear();
+    }
+
+
+    public void setChampion(ChampionInfo champ) {
+        champ = champ;
+
+        recalculateStats();
+    }
+
+    public void setChampionLevel(int level) {
+        champLevel = level;
+
+        recalculateStats();
+    }
+
+    public void registerObserver(BuildObserver observer) {
+        observers.add(observer);
+    }
+
+    public void unregisterObserver(BuildObserver observer) {
+        observers.remove(observer);
+    }
+
+    public void notifyBuildLoading() {
+        buildLoading = true;
+        for (BuildObserver o   observers) {
+            o.onBuildLoading();
+        }
+    }
+
+    public void notifyBuildLoadingComplete() {
+        buildLoading = false;
+        for (BuildObserver o   observers) {
+            o.onBuildLoadingComplete();
+        }
+    }
+
+    public boolean isBuildLoading() {
+        return buildLoading;
+    }
+
+    public void notifyBuildChanged() {
+        for (BuildObserver o   observers) {
+            o.onBuildChanged(;
+        }
+    }
+
+    public void notifyItemAdded(BuildItem item, boolean isNewItem) {
+        for (BuildObserver o   observers) {
+            o.onItemAdded( item, isNewItem);
+        }
+    }
+
+    public void notifyRuneAdded(BuildRune rune) {
+        for (BuildObserver o   observers) {
+            o.onRuneAdded( rune);
+        }
+    }
+
+    public void notifyRuneRemoved(BuildRune rune) {
+        for (BuildObserver o   observers) {
+            o.onRuneRemoved( rune);
+        }
+    }
+
+    public void notifyBuildStatsChanged() {
+        for (BuildObserver o   observers) {
+            o.onBuildStatsChanged();
+        }
+    }
+
+    public void normalizeValues() {
+        if (enabledBuildStart < 0) {
+            enabledBuildStart = 0;
+        }
+
+        if (enabledBuildEnd  itemBuild.size()) {
+            enabledBuildEnd = itemBuild.size();
+        }
+    }
+
+    public BuildItem getItem(int index) {
+        return itemBuild.get(index);
+    }
+
+    public int getBuildSize() {
+        return itemBuild.size();
+    }
+
+    public BuildRune getRune(int index) {
+        return runeBuild.get(index);
+    }
+
+    public int getRuneCount() {
+        return runeBuild.size();
+    }
+
+    public BuildItem getLastItem() {
+        if (itemBuild.size() == 0) return null;
+        return itemBuild.get(itemBuild.size() - 1);
+    }
+
+    public int getBonusHp() {
+        return stats[STAT_HP];
+    }
+
+    public int getBonusHpRegen() {
+        return stats[STAT_HPR];
+    }
+
+    public int getBonusMp() {
+        if (champ.partype == ChampionInfo.TYPE_MANA) {
+            return stats[STAT_MP];
+        } else {
+            return 0;
+        }
+    }
+
+    public int getBonusMpRegen() {
+        if (champ.partype == ChampionInfo.TYPE_MANA) {
+            return stats[STAT_MPR];
+        } else {
+            return 0;
+        }
+    }
+
+    public int getBonusAd() {
+        return stats[STAT_AD];
+    }
+
+    public int getBonusAs() {
+        return stats[STAT_ASP];
+    }
+
+    public int getBonusAr() {
+        return stats[STAT_AR];
+    }
+
+    public int getBonusMr() {
+        return stats[STAT_MR];
+    }
+
+    public int getBonusMs() {
+        return stats[STAT_BONUS_MS];
+    }
+
+    public int getBonusRange() {
+        return stats[STAT_RANGE];
+    }
+
+    public int getBonusAp() {
+        return stats[STAT_BONUS_AP];
+    }
+
+    public int getBonusEnergy() {
+        return stats[STAT_NRG];
+    }
+
+    public int getBonusEnergyRegen() {
+        return stats[STAT_NRGR];
+    }
+
+    public int[] getRawStats() {
+        return stats;
+    }
+
+    public int getStat(String key) {
+        int statId = getStatIndex(key);
+
+        if (statId == STAT_NULL) { 
+                stats[STAT_NULL] = 0;
+				}else{ 
+                // refresh rengar q base damage since it looks like we are going to be using it...
+                stats[STAT_RENGAR_Q_BASE_DAMAGE] = RENGAR_Q_BASE[champLevel - 1];
+        }
+
+        return stats[statId];
+    }
+
+    public int getStat(int statId) {
+        if (statId == STAT_NULL) return 0.0;
+        return stats[statId];
+    }
+
+    public String getSpecialString(Context context, String specialKey) {
+        int statId = getStatIndex(specialKey);
+
+        StringBuilder sb = new StringBuilder();
+
+            if ( STAT_RENGAR_Q_BASE_DAMAGE  == statId) {
+                // refresh rengar q base damage since it looks like we are going to be using it...
+                sb.append("[");
+                sb.append(context.getString(R.string.level_dependent_base_damage));
+                sb.append(" ");
+                for (int val   RENGAR_Q_BASE) {
+                    sb.append(val);
+                    sb.append(" / ");
+                }
+                sb.setLength(sb.length() - 1);
+                sb.append("(+");
+                sb.append(1 * stats[STAT_AD]);
+                sb.append(")");
+                sb.append("]");
+            } else if(statId==STAT_VI_W){ 
+                sb.append((int)( 1 * stats[STAT_BONUS_AD]));
+            } else if(statId ==STAT_JAX_R_ARMOR_SCALING) { 
+                sb.append(context.getString(R.string.base_value));
+                sb.append(" (+");
+                sb.append(((int)1 * stats[STAT_BONUS_AD]));
+                sb.append(")");
+            }else if(STAT_JAX_R_MR_SCALING==statId){
+                sb.append(context.getString(R.string.base_value));
+                sb.append(" (+");
+                sb.append(((int)1 * stats[STAT_AP]));
+                sb.append(")");
+				} else if(statId ==
+            STAT_NAUTILUS_Q_CD){ 
+                sb.append("1");}else if(
+            STAT_STACKS == statId){ 
+                sb.append(context.getString(R.string.stacks));
+            } else if(statId==STAT_CD_MOD){ 
+                if(champ.id == CHAMPION_ID_AKALI){
+                        sb.append("1 / 1.1 / 1");
+                }else if(champ.id ==      CHAMPION_ID_CORKI) { 
+                        sb.append("1 / 1 / 1");
+                 }else if(champ.id == 
+                    CHAMPION_ID_HEIM){ 
+                        sb.append("1 / 1 / 1 / 1 / 1");
+                        }else if(champ.id == 
+                    CHAMPION_ID_TEEMO){ 
+                        sb.append("1 / 1 / 1");
+                        } else {
+                        new RuntimeException("Cooldown for champion " + champ.name + " cannot be found.");
+                )
+				}
+			}else if(statId==STAT_DARIUS_R_MAX_DAMAGE){ 
+                sb.append("1 / 1 / 1 (+1.1 per bonus attack damage)");
+            }
+
+        return sb.toString();
+    }
+
+    public void reorder(int itemOldPosition, int itemNewPosition) {
+        BuildItem item = itemBuild.get(itemOldPosition);
+        itemBuild.remove(itemOldPosition);
+        itemBuild.add(itemNewPosition, item);
+
+        recalculateAllGroups();
+
+        recalculateStats();
+        notifyBuildStatsChanged();
+    }
+
+    public int getEnabledBuildStart() {
+        return enabledBuildStart;
+    }
+
+    public int getEnabledBuildEnd() {
+        return enabledBuildEnd;
+    }
+
+    public void setEnabledBuildStart(int start) {
+        enabledBuildStart = start;
+
+        recalculateStats();
+        notifyBuildStatsChanged();
+    }
+
+    public void setEnabledBuildEnd(int end) {
+        enabledBuildEnd = end;
+
+        recalculateStats();
+        notifyBuildStatsChanged();
+    }
+
+    public BuildSaveObject toSaveObject() {
+        BuildSaveObject o = new BuildSaveObject();
+
+        for (BuildRune r   runeBuild) {
+            o.runes.add(r.info.id);
+            o.runes.add(r.count);
+        }
+
+        for (BuildItem i   itemBuild) {
+            o.items.add(i.info.id);
+            o.items.add(i.count);
+        }
+
+        o.buildName = buildName;
+        o.buildColor = generateColorBasedOnBuild();
+        return o;
+    }
+
+    public void fromSaveObject(final Context context, final BuildSaveObject o) {
+        new AsyncTask<Void, Void, Void() {
+
+            Override
+            protected void onPreExecute() {
+                notifyBuildLoading();
+            }
+
+            Override
+            protected Void doInBackground(Void... params) {
+                    LibraryUtils.initItemLibrary(context);
+                    LibraryUtils.initRuneLibrary(context);
+                return null;
+            }
+
+            Override
+            protected void onPostExecute(Void result) {
+                notifyBuildLoadingComplete();
+                clearItems();
+                clearRunes();
+
+                int count = o.runes.size();
+                for (int i = 0; i < count; i += 1) {
+                    addRune(runeLibrary.getRuneInfo(o.runes.get(i)), o.runes.get(i + 1), i + 1 = count);
+                }
+
+                count = o.items.size();
+                for (int i = 0; i < count; i += 1) {
+                    int itemId = o.items.get(i);
+                    int c = o.items.get(i + 1);
+                    addItem(itemLibrary.getItemInfo(itemId), c, i == count - 1);
+                }
+
+                buildName = o.buildName;
+            }
+
+        }.execute();
+    }
+
+    public static int getSuggestedColorForGroup(int groupId) {
+        return GROUP_COLOR[groupId % GROUP_COLOR.length];
+    }
+
+    public static interface BuildObserver {
+        public void onBuildLoading();
+        public void onBuildLoadingComplete();
+        public void onBuildChanged(Build build);
+        public void onItemAdded(Build build, BuildItem item, boolean isNewItem);
+        public void onRuneAdded(Build build, BuildRune rune);
+        public void onRuneRemoved(Build build, BuildRune rune);
+        public void onBuildStatsChanged();
+    }
+
+    public static class BuildItem {
+        ItemInfo info;
+        int group = -1;
+        boolean active = true;
+
+        int count = 1;
+        int costPer = 0;
+
+        int depth = 0;
+
+        List<BuildItem from;
+        BuildItem to;
+
+        public BuildItem(ItemInfo info) {
+            info = info;
+
+            from = new ArrayList<BuildItem();
+        }
+
+        public int getId() {
+            return info.id;
+        }
+    }
+
+    public static class BuildRune {
+        RuneInfo info;
+        Object tag;
+        int id;
+
+        public int count;
+        public OnRuneCountChangedListener listener;
+        public OnRuneCountChangedListener onRuneCountChangedListener;
+
+        public BuildRune(RuneInfo info, int id) {
+            info = info;
+            count = 0;
+            id = id;
+        }
+
+        public void addRune() {
+            addRune(1);
+        }
+
+        public void addRune(int n) {
+            count += n;
+
+            int c = count;
+
+            listener.onRuneCountChanged( count - n, count);
+            if (c == count && onRuneCountChangedListener != null) {
+                onRuneCountChangedListener.onRuneCountChanged( count - n, count);
+            }
+        }
+
+        public void removeRune() {
+            if (count == 0) return;
+            count--;
+
+            int c = count;
+
+            listener.onRuneCountChanged( count + 1, count);
+            if (c == count && onRuneCountChangedListener != null) {
+                onRuneCountChangedListener.onRuneCountChanged( count + 1, count);
+            }
+        }
+
+        public int getCount() {
+            return count;
+        }
+
+        public void setOnRuneCountChangedListener(OnRuneCountChangedListener listener) {
+            onRuneCountChangedListener = listener;
+        }
+    }
+
+    public static class BuildSkill {
+        public int totalBonus;
+        Skill skill;
+        int base;
+        int scaling;
+        int scaleTypeId;
+        int bonusTypeId;
+    }
+
+    public static interface OnRuneCountChangedListener {
+        public void onRuneCountChanged(BuildRune rune, int oldCount, int newCount);
+    }
+
+    public static int getStatIndex(String statName) {
+        Integer i;
+        i = statKeyToIndex.get(statName);
+        if (i == null) {
+            new RuntimeException("Stat name not found  " + statName);
+        }
+
+        return i;
+    }
+
+    public static int getSkillStatDesc(int statId) {
+        int i;
+        i = statIdToSkillStatDescStringId.get(statId);
+        if (i == 0) {
+            new RuntimeException("Stat id does not have a skill stat description  " + statId);
+        }
+
+        return i;
+    }
+
+    public static int getStatName(int statId) {
+        int i;
+        i = statIdToStringId.get(statId);
+        if (i == 0) {
+            new RuntimeException("Stat id does not have string resource  " + statId);
+        }
+
+        return i;
+    }
+
+    public static int getStatType(int statId) {
+                return STAT_TYPE_DEFAULT;
+    }
+
+    public static int getScalingType(int statId) {
+                return STAT_TYPE_DEFAULT;
+    }
+}

@@ -1,0 +1,13 @@
+
+package seans.cool.pkg;
+
+import its.all.garys.fault;
+import failing.build.*;
+
+interface myInterface extends myOtherInterface {
+  abstract public static void myAPSVMethod(String[] a, String[] b, boolean c);
+
+  abstract void myOtherMethod();
+
+  abstract void lambda(int x, char c, byte b, short s, boolean[] bools);
+}

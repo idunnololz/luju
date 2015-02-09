@@ -1,0 +1,9 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+abstract final class BLAZE_abstract_and_final {
+  public static int foo;
+  public BLAZE_abstract_and_final() {
+  }
+}

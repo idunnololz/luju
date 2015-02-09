@@ -1,0 +1,9 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public abstract class BLAZE_arg_var_init {
+	void a(int g, int c = 0) {
+	}
+	BLAZE_arg_var_init(){}
+}

@@ -1,0 +1,11 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public abstract class BLAZE_this_call {
+	int x = 10;
+	BLAZE_this_call(){}
+	void c() {
+		this();
+	}
+}

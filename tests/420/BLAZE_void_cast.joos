@@ -1,0 +1,11 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public abstract class BLAZE_void_cast {
+	void aa() {
+		int a = 1;
+		int b = (void) a;
+	}
+	BLAZE_void_cast(){}
+}

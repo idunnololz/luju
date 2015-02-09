@@ -1,0 +1,8 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public class fail_int_lit_ofb2 {
+	public int i = -2147483648;
+	fail_int_lit_ofb2 () { }
+}

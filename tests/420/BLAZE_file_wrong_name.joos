@@ -1,0 +1,7 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public class Clazz {
+	Clazz(){}
+}

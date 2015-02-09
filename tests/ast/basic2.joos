@@ -1,0 +1,7 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public abstract class basic2 {
+  abstract void basic2() {}
+}

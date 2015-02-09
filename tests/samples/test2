@@ -1,0 +1,9 @@
+#!/bin/bash
+contents=""
+while read line; do
+    contents=$contents$line
+done
+
+if [[ $contents == "Blame it on Gary." ]]; then
+    echo "It's all Gary's fault.";
+fi

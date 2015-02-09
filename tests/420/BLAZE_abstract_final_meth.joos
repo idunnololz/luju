@@ -1,0 +1,8 @@
+package example.pkg;
+
+import joos.io.pkg;
+
+public abstract class BLAZE_abstract_final_meth {
+  abstract final void c();
+  BLAZE_abstract_final_meth(){}
+}
