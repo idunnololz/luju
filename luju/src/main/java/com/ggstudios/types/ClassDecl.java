@@ -1,7 +1,6 @@
 package com.ggstudios.types;
 
 import com.ggstudios.utils.ListUtils;
-import com.ggstudios.utils.PrintUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +8,7 @@ import java.util.List;
 public class ClassDecl extends TypeDecl {
     private List<String> implementsList = new ArrayList<>();
     private List<ConstructorDecl> constructorDecls = new ArrayList<>();
-    private List<FieldDecl> fieldDecls = new ArrayList<>();
+    private List<VarDecl> fieldDecls = new ArrayList<>();
 
     private String superTypeName;
 
@@ -25,11 +24,11 @@ public class ClassDecl extends TypeDecl {
         this.implementsList.add(impl);
     }
 
-    public List<FieldDecl> getFieldDeclarations() {
+    public List<VarDecl> getFieldDeclarations() {
         return fieldDecls;
     }
 
-    public void addFieldDeclaration(FieldDecl fieldDecl) {
+    public void addFieldDeclaration(VarDecl fieldDecl) {
         this.fieldDecls.add(fieldDecl);
     }
 
@@ -59,7 +58,7 @@ public class ClassDecl extends TypeDecl {
         sb.append("])\n");
 
         if (fieldDecls.size() != 0) {
-            for (FieldDecl fDecl : fieldDecls) {
+            for (VarDecl fDecl : fieldDecls) {
                 fDecl.toPrettyString(sb, level + 1);
                 sb.append("\n");
             }

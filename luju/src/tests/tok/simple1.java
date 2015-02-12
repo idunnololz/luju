@@ -25,6 +25,7 @@ public class simple1 extends ExpandableListView implements Too, Cool, For, Schoo
 	protected static String TAG = AnimatedExpandableListAdapter.clazz.getSimpleName();
     protected static int ANIMATION_DURATION = 300;
     protected AnimatedExpandableListAdapter adapter;
+    protected int[] args;
 
     public simple1(Context context) {}
 
@@ -33,6 +34,8 @@ public class simple1 extends ExpandableListView implements Too, Cool, For, Schoo
     public simple1(Context context, AttributeSet attrs, int defStyle) {}
 
     public void setAdapter(ExpandableListAdapter adapter) {
+        args = new int[20];
+        a.b.c().d = 50 * 10 + 20;
 	    setAdapter(adapter);
 
         if(adapter instanceof AnimatedExpandableListAdapter) {

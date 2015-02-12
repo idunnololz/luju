@@ -3,39 +3,134 @@ package com.ggstudios.luju;
 import com.ggstudios.error.ParseException;
 import com.ggstudios.error.TokenException;
 import com.ggstudios.error.WeedException;
+import com.ggstudios.utils.ExceptionUtils;
 import com.ggstudios.utils.Print;
 
 import java.io.BufferedReader;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class LuJuCompiler {
-    private Tokenizer tokenizer;
-    private Parser parser;
-    private AstGenerator astGen;
+    private NameResolver nameResolver = new NameResolver();
 
     public static final int RETURN_CODE_SUCCESS = 0;
     public static final int RETURN_CODE_ERROR = 42;
+    public static final int RETURN_CODE_FATAL_ERROR = 43;
 
-    public LuJuCompiler() {
-        tokenizer = new Tokenizer();
-        parser = new Parser();
-        astGen = new AstGenerator();
+    private ExecutorService executor;
+    private WorkerPool workerPool;
+
+    public LuJuCompiler(int maxThreads) {
+        executor = Executors.newFixedThreadPool(maxThreads);
+        workerPool = new WorkerPool(maxThreads * 2);
     }
 
-    public int compileWith(Main.ArgList args) {
-        Ast ast = new Ast();
-        for (String fileName : args.fileNames) {
+    public void shutdown() {
+        executor.shutdown();
+        workerPool.ensureNoLostWorker();
+    }
+
+    public int compileWith(final Main.ArgList args) {
+        final Ast ast = new Ast();
+
+        final CountDownLatch doneSignal = new CountDownLatch(args.fileNames.size());
+
+        final Result result = new Result();
+
+        for (final String fileName : args.fileNames) {
+            FileNodeWorker worker = workerPool.getWorker();
+            worker.setup(args, ast, fileName, doneSignal, result);
+            executor.execute(worker);
+        }
+
+        try {
+            doneSignal.await();
+        } catch (InterruptedException e) {
+            Print.e(ExceptionUtils.exceptionToString(e));
+            result.error = RETURN_CODE_FATAL_ERROR;
+        }
+
+        if (result.error != 0) {
+            return processError(result.error);
+        }
+
+        if (args.isPrintAst()) {
+            Print.ln(ast.toPrettyString());
+        }
+
+        nameResolver.resolveNames(ast);
+
+        return RETURN_CODE_SUCCESS;
+    }
+
+    private int processError(int error) {
+        switch (error) {
+            case RETURN_CODE_ERROR:
+                return error;
+            default:
+                throw new RuntimeException("Fatal error");
+        }
+    }
+
+    private static class FileNodeWorker implements Runnable {
+        private Tokenizer tokenizer = new Tokenizer();
+        private Parser parser = new Parser();
+        private AstGenerator astGenerator = new AstGenerator();
+        private Ast ast;
+        private Main.ArgList args;
+        private String fileName;
+        private CountDownLatch doneSignal;
+        private Result result;
+
+        private WorkerPool parent;
+
+        public FileNodeWorker(WorkerPool pool) {
+            this.parent = pool;
+        }
+
+        public void setup(Main.ArgList args, Ast ast, String fileName, CountDownLatch doneSignal,
+                          Result result) {
+            this.ast = ast;
+            this.args = args;
+            this.fileName = fileName;
+            this.doneSignal = doneSignal;
+            this.result = result;
+        }
+
+        @Override
+        public void run() {
+            FileNode fn = null;
+            try {
+                fn = generateFileNode(args, fileName);
+
+                if (fn == null) {
+                    result.error = RETURN_CODE_ERROR;
+                } else {
+                    synchronized (ast) {
+                        ast.addFileNode(fn);
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                result.error = RETURN_CODE_FATAL_ERROR;
+            }
+
+            doneSignal.countDown();
+            parent.free(this);
+        }
+
+        private FileNode generateFileNode(Main.ArgList args, String fileName) {
             FileNode fn = new FileNode();
             List<Token> tokens = null;
             try {
-                if (args.isTokenizeEnabled()) {
-                    tokens = tokenizer.tokenizeWith(fileName);
-                } else {
-                    return RETURN_CODE_SUCCESS;
-                }
+                tokens = tokenizer.tokenizeWith(fileName);
+
                 if (args.isPrintTokens()) {
                     for (Token t : tokens) {
-                        //Print.ln(t.toString());
                         Print.ln(t.toString());
                     }
                 }
@@ -43,7 +138,7 @@ public class LuJuCompiler {
                 Token t = e.getToken();
                 Print.e(String.format("LuJu: TokenException(%d, %d): %s", t.getRow(), t.getCol(), e.getMessage()));
 
-                return RETURN_CODE_ERROR;
+                return null;
             }
 
             fn.setFilePath(fileName);
@@ -59,25 +154,65 @@ public class LuJuCompiler {
                     Print.ln(n.toPrettyString());
                 }
 
-                astGen.generateAst(fn, n);
-                ast.addFileNode(fn);
+                astGenerator.generateAst(fn, n);
             } catch (ParseException e) {
                 Token t = e.getToken();
                 Print.e(String.format("LuJu: ParseException(%d, %d): %s", t.getRow(), t.getCol(), e.getMessage()));
 
-                return RETURN_CODE_ERROR;
+                return null;
             } catch (WeedException e) {
                 Token t = e.getToken();
                 Print.e(String.format("LuJu: ParseException(%d, %d): %s", t.getRow(), t.getCol(), e.getMessage()));
 
-                return RETURN_CODE_ERROR;
+                return null;
+            }
+
+            return fn;
+        }
+    }
+
+    private static class WorkerPool {
+        private Object lock = new Object();
+        private List<FileNodeWorker> workers = new ArrayList<>();
+        private Stack<FileNodeWorker> workerStack = new Stack<>();
+
+        public WorkerPool(int maxWorkers) {
+            for (int i = 0; i < maxWorkers; i++) {
+                FileNodeWorker worker = new FileNodeWorker(this);
+                workers.add(worker);
+                workerStack.push(worker);
             }
         }
 
-        if (args.isPrintAst()) {
-            Print.ln(ast.toPrettyString());
+        public FileNodeWorker getWorker() {
+            synchronized (lock) {
+                while (workerStack.empty()) {
+                    try {
+                        lock.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                return workerStack.pop();
+            }
         }
 
-        return RETURN_CODE_SUCCESS;
+        public void free(FileNodeWorker worker) {
+            synchronized (lock) {
+                workerStack.push(worker);
+                lock.notify();
+            }
+        }
+
+        public void ensureNoLostWorker() {
+            if (workers.size() != workerStack.size()) {
+                System.err.println(String.format("Worker(s) lost! Total worker(s): %s. Free worker(s): %s.",
+                        workers.size(), workerStack.size()));
+            }
+        }
+    }
+
+    private static class Result {
+        int error = 0;
     }
 }

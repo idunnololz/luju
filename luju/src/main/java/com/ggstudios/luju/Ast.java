@@ -34,4 +34,12 @@ public class Ast {
     public void addFileNode(FileNode fn) {
         nodes.add(fn);
     }
+
+    public int size() {
+        return nodes.size();
+    }
+
+    public FileNode get(int index) {
+        return nodes.get(index);
+    }
 }

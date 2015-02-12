@@ -1,7 +1,20 @@
 package com.ggstudios.types;
 
+import com.ggstudios.luju.Token;
+import com.ggstudios.utils.ParserUtils;
+import com.ggstudios.utils.PrintUtils;
+
 public class AstNode {
     private int row, col;
+
+    public void setPos(Token t) {
+        setPos(t.getRow(), t.getCol());
+    }
+
+    public void setPos(AstNode node) {
+        this.row = node.getRow();
+        this.col = node.getCol();
+    }
 
     public void setPos(int row, int col) {
         this.row = row;
@@ -22,5 +35,10 @@ public class AstNode {
 
     public void setCol(int col) {
         this.col = col;
+    }
+
+    public void toPrettyString(StringBuilder sb, int level) {
+        PrintUtils.level(sb, level);
+        sb.append(getClass().getSimpleName());
     }
 }

@@ -10,9 +10,9 @@ import java.util.Set;
 
 public class MethodDecl extends AstNode {
     private Set<Token.Type> modifiers = new HashSet<>();
-    private UserType returnType;
+    private ReferenceType returnType;
     private Token methodName;
-    private List<FieldDecl> arguments = new ArrayList<>();
+    private List<VarDecl> arguments = new ArrayList<>();
     private Block block;
 
     public Set<Token.Type> getModifiers() {
@@ -32,7 +32,7 @@ public class MethodDecl extends AstNode {
         sb.append(methodName.getRaw());
         sb.append("; Args: [");
         if (!arguments.isEmpty()) {
-            for (FieldDecl arg : arguments) {
+            for (VarDecl arg : arguments) {
                 arg.toPrettyString(sb, 0);
                 sb.append(", ");
             }
@@ -40,15 +40,17 @@ public class MethodDecl extends AstNode {
         }
         sb.append("])");
 
-        if (block != null)
+        if (block != null) {
+            sb.append("\n");
             block.toPrettyString(sb, level + 1);
+        }
     }
 
-    public UserType getReturnType() {
+    public ReferenceType getReturnType() {
         return returnType;
     }
 
-    public void setReturnType(UserType returnType) {
+    public void setReturnType(ReferenceType returnType) {
         this.returnType = returnType;
     }
 
@@ -60,11 +62,11 @@ public class MethodDecl extends AstNode {
         this.methodName = methodName;
     }
 
-    public List<FieldDecl> getArguments() {
+    public List<VarDecl> getArguments() {
         return arguments;
     }
 
-    public void addArgument(FieldDecl argument) {
+    public void addArgument(VarDecl argument) {
         this.arguments.add(argument);
     }
 

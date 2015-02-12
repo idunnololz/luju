@@ -1,17 +1,15 @@
 package com.ggstudios.types;
 
 import com.ggstudios.luju.Token;
-import com.ggstudios.utils.Print;
 import com.ggstudios.utils.PrintUtils;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 
-public class FieldDecl extends AstNode {
+public class VarDecl extends Statement {
     private Set<Token.Type> modifiers = new HashSet<>();
 
-    private UserType type;
+    private ReferenceType type;
 
     private Token id;
 
@@ -23,11 +21,11 @@ public class FieldDecl extends AstNode {
         this.modifiers.add(mod);
     }
 
-    public UserType getType() {
+    public ReferenceType getType() {
         return type;
     }
 
-    public void setType(UserType type) {
+    public void setType(ReferenceType type) {
         this.type = type;
     }
 

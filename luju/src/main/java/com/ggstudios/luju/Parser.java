@@ -121,6 +121,8 @@ public class Parser {
                     }
                     case ParseTable.NONT_METHODDECLARATION: {
                         // methodDeclaration -> methodHeader methodBody
+                        // methodHeader -> optModifiers type methodDeclarator
+                        // methodDeclarator -> ID LPAREN optFormalParameterList RPAREN
 
                         // need to check mods...
                         Node mods = cur.children.get(0).children.get(0);
@@ -132,6 +134,8 @@ public class Parser {
                         boolean isNative = set.contains(Token.Type.NATIVE);
                         boolean isStatic = set.contains(Token.Type.STATIC);
                         boolean isFinal = set.contains(Token.Type.FINAL);
+                        boolean isPublic = set.contains(Token.Type.PUBLIC);
+                        boolean isProtected = set.contains(Token.Type.PROTECTED);
 
                         if (isAbstract || isNative) {
                             // ensure has no body...
@@ -169,6 +173,11 @@ public class Parser {
                             throw new WeedException(errTok, "A native method must be static.");
                         }
 
+                        if (!(isPublic ^ isProtected)) {
+                            Token errTok = cur.children.get(0).children.get(2).children.get(0).t;
+                            throw new WeedException(errTok, "A method must be either public or protected.");
+                        }
+
                         if (isInterface) {
                             if (isStatic) {
                                 Token errTok = getTokenWithType(toks, Token.Type.STATIC);
@@ -196,6 +205,8 @@ public class Parser {
                         boolean isNative = set.contains(Token.Type.NATIVE);
                         boolean isStatic = set.contains(Token.Type.STATIC);
                         boolean isFinal = set.contains(Token.Type.FINAL);
+                        boolean isPublic = set.contains(Token.Type.PUBLIC);
+                        boolean isProtected = set.contains(Token.Type.PROTECTED);
 
                         if (isInterface) {
                             if (isStatic) {
@@ -208,6 +219,11 @@ public class Parser {
                                 Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
                                 throw new WeedException(errTok, "Interface method cannot be native.");
                             }
+                        }
+
+                        if (!(isPublic ^ isProtected)) {
+                            Token errTok = cur.children.get(0).children.get(2).children.get(0).t;
+                            throw new WeedException(errTok, "A method must be either public or protected.");
                         }
                         break;
                     }
