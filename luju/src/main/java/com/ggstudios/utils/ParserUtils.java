@@ -29,4 +29,25 @@ public class ParserUtils {
 
         return toks;
     }
+
+    public static List<Token> getIdSeqInTree(Parser.Node tree) {
+        List<Token> toks = new ArrayList<>();
+        Stack<Parser.Node> toVisit = new Stack<>();
+        toVisit.push(tree);
+
+        while (!toVisit.isEmpty()) {
+            Parser.Node n = toVisit.pop();
+            if (n.t == null) {
+                for (Parser.Node child : ListUtils.reverse(n.children)) {
+                    toVisit.push(child);
+                }
+            } else {
+                if (n.t.getType() != Token.Type.DOT) {
+                    toks.add(n.t);
+                }
+            }
+        }
+
+        return toks;
+    }
 }

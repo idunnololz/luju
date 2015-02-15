@@ -1,14 +1,18 @@
 package com.ggstudios.types;
 
 public class ArrayCreationExpression extends Expression {
-    private TypeExpression typeExpr;
+    private ReferenceType typeExpr;
     private Expression dimExpr;
 
-    public TypeExpression getTypeExpr() {
+    public ArrayCreationExpression() {
+        setType(ARRAY_CREATION_EXPRESSION);
+    }
+
+    public ReferenceType getTypeExpr() {
         return typeExpr;
     }
 
-    public void setTypeExpr(TypeExpression typeExpr) {
+    public void setTypeExpr(ReferenceType typeExpr) {
         this.typeExpr = typeExpr;
     }
 

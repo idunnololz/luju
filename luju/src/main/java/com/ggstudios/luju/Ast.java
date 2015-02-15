@@ -4,17 +4,22 @@ import com.ggstudios.utils.PrintUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class Ast {
-    public static final String PACKAGE_UNNAMED = "@unnamed";
+    public static final String PACKAGE_UNNAMED = "@default";
 
     private List<FileNode> nodes = new ArrayList<>();
 
     public String toPrettyString() {
-        return toPrettyString(new StringBuilder(), 0);
+        return toPrettyString(new StringBuilder(), 0, null);
     }
 
-    private String toPrettyString(StringBuilder sb, int level) {
+    public String toPrettyString(Set<String> filter) {
+        return toPrettyString(new StringBuilder(), 0, filter);
+    }
+
+    private String toPrettyString(StringBuilder sb, int level, Set<String> filter) {
         PrintUtils.level(sb, level);
         sb.append("Ast (");
         sb.append(nodes.size());
@@ -22,6 +27,7 @@ public class Ast {
 
         if (!nodes.isEmpty()) {
             for (FileNode fn : nodes) {
+                if (filter != null && filter.contains(fn.getPackageName())) continue;
                 fn.toPrettyString(sb, level);
                 sb.append('\n');
             }

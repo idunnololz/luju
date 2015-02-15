@@ -14,25 +14,27 @@ import java.util.Stack;
 
 public class Parser {
     private ParseTable table;
+    private FileNode fn;
 
     public Parser() {
         table = new ParseTable();
     }
 
     public Node parse(FileNode fn) {
+        this.fn = fn;
         List<Token> tokens = fn.getTokens();
-        Node tree = generateSyntaxTree(tokens);
+        Node tree = generateSyntaxTree(fn, tokens);
         blazeIt(fn, tree);
         return tree;
     }
 
-    private Node generateSyntaxTree(List<Token> tokens) {
+    private Node generateSyntaxTree(FileNode fn, List<Token> tokens) {
         Stack<Integer> stack = new Stack<>();
         Stack<Node> nodeStack = new Stack<>();
         stack.push(0);
 
         if (tokens.size() == 0) {
-            throw new ParseException("Unexpected end of input.");
+            throw new ParseException(fn.getFilePath(), "Unexpected end of input.");
         }
 
         int index = 0;
@@ -40,7 +42,7 @@ public class Parser {
             Token t = tokens.get(index);
             Integer action = table.getLrAction(stack.peek(), t.getType().getValue());
             if (action == null) {
-                throw new ParseException(t, String.format("Received invalid token '%s' with type %s.", t.getRaw(), t.getType()));
+                throw new ParseException(fn.getFilePath(), t, String.format("Received invalid token '%s' with type %s.", t.getRaw(), t.getType()));
             } else if (table.isActionShift(action)) {
                 if (t.getType() == Token.Type.EOF) {
                     return nodeStack.peek();
@@ -63,7 +65,7 @@ public class Parser {
                 stack.push(gotoIndex);
                 nodeStack.push(n);
             } else {
-                throw new ParseException("Wtf.");
+                throw new ParseException(fn.getFilePath(), "Wtf.");
             }
         }
     }
@@ -108,13 +110,13 @@ public class Parser {
                         if (set.contains(Token.Type.ABSTRACT) && set.contains(Token.Type.FINAL)) {
                             Token t1 = getTokenWithType(toks, Token.Type.ABSTRACT);
                             Token t2 = getTokenWithType(toks, Token.Type.FINAL);
-                            throw new WeedException(t1, String.format("Illegal combination of modifiers: '%s' and '%s'.",
+                            throw new WeedException(fn.getFilePath(), t1, String.format("Illegal combination of modifiers: '%s' and '%s'.",
                                     t1.getRaw(), t2.getRaw()));
                         }
 
                         if (!set.contains(Token.Type.PUBLIC) && !set.contains(Token.Type.PROTECTED)) {
                             Token errTok = cur.children.get(2).t;
-                            throw new WeedException(errTok, String.format("Class '%s' must be either public or protected.", errTok.getRaw()));
+                            throw new WeedException(fn.getFilePath(), errTok, String.format("Class '%s' must be either public or protected.", errTok.getRaw()));
                         }
 
                         break;
@@ -145,7 +147,7 @@ public class Parser {
                             if (rhs != Token.Type.SEMI.getValue()) {
                                 List<Token> errToks = ParserUtils.getTokensInTree(methBody);
                                 Token t = errToks.get(0);
-                                throw new WeedException(t, "Abstract or native methods cannot have bodies.");
+                                throw new WeedException(fn.getFilePath(), t, "Abstract or native methods cannot have bodies.");
                             }
                         }
 
@@ -158,36 +160,36 @@ public class Parser {
                             }
 
                             if (errTok != null) {
-                                throw new WeedException(errTok, String.format("Illegal combination of modifiers: 'abstract' and '%s'.",
+                                throw new WeedException(fn.getFilePath(), errTok, String.format("Illegal combination of modifiers: 'abstract' and '%s'.",
                                         errTok.getRaw()));
                             }
                         }
 
                         if (isStatic && isFinal) {
                             Token errTok = getTokenWithType(toks, Token.Type.STATIC);
-                            throw new WeedException(errTok, "Illegal combination of modifiers: 'static' and 'final'.");
+                            throw new WeedException(fn.getFilePath(), errTok, "Illegal combination of modifiers: 'static' and 'final'.");
                         }
 
                         if (isNative && !isStatic) {
                             Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
-                            throw new WeedException(errTok, "A native method must be static.");
+                            throw new WeedException(fn.getFilePath(), errTok, "A native method must be static.");
                         }
 
                         if (!(isPublic ^ isProtected)) {
                             Token errTok = cur.children.get(0).children.get(2).children.get(0).t;
-                            throw new WeedException(errTok, "A method must be either public or protected.");
+                            throw new WeedException(fn.getFilePath(), errTok, "A method must be either public or protected.");
                         }
 
                         if (isInterface) {
                             if (isStatic) {
                                 Token errTok = getTokenWithType(toks, Token.Type.STATIC);
-                                throw new WeedException(errTok, "Interface method cannot be static.");
+                                throw new WeedException(fn.getFilePath(), errTok, "Interface method cannot be static.");
                             } else if (isFinal) {
                                 Token errTok = getTokenWithType(toks, Token.Type.FINAL);
-                                throw new WeedException(errTok, "Interface method cannot be final.");
+                                throw new WeedException(fn.getFilePath(), errTok, "Interface method cannot be final.");
                             } else if (isNative) {
                                 Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
-                                throw new WeedException(errTok, "Interface method cannot be native.");
+                                throw new WeedException(fn.getFilePath(), errTok, "Interface method cannot be native.");
                             }
                         }
                         break;
@@ -211,19 +213,19 @@ public class Parser {
                         if (isInterface) {
                             if (isStatic) {
                                 Token errTok = getTokenWithType(toks, Token.Type.STATIC);
-                                throw new WeedException(errTok, "Interface method cannot be static.");
+                                throw new WeedException(fn.getFilePath(), errTok, "Interface method cannot be static.");
                             } else if (isFinal) {
                                 Token errTok = getTokenWithType(toks, Token.Type.FINAL);
-                                throw new WeedException(errTok, "Interface method cannot be final.");
+                                throw new WeedException(fn.getFilePath(), errTok, "Interface method cannot be final.");
                             } else if (isNative) {
                                 Token errTok = getTokenWithType(toks, Token.Type.NATIVE);
-                                throw new WeedException(errTok, "Interface method cannot be native.");
+                                throw new WeedException(fn.getFilePath(), errTok, "Interface method cannot be native.");
                             }
                         }
 
                         if (!(isPublic ^ isProtected)) {
                             Token errTok = cur.children.get(0).children.get(2).children.get(0).t;
-                            throw new WeedException(errTok, "A method must be either public or protected.");
+                            throw new WeedException(fn.getFilePath(), errTok, "A method must be either public or protected.");
                         }
                         break;
                     }
@@ -237,7 +239,7 @@ public class Parser {
                         Node mods = cur.children.get(0);
                         List<Token> toks = ParserUtils.getTokensInTree(mods);
                         if (!toks.get(0).getRaw().equals(fn.getClassName())) {
-                            throw new WeedException(toks.get(0), String.format("Invalid constructor name '%s'.", toks.get(0).getRaw()));
+                            throw new WeedException(fn.getFilePath(), toks.get(0), String.format("Invalid constructor name '%s'.", toks.get(0).getRaw()));
                         }
                         break;
                     }
@@ -253,10 +255,10 @@ public class Parser {
 
                         if (set.contains(Token.Type.FINAL)) {
                             Token errTok = getTokenWithType(toks, Token.Type.FINAL);
-                            throw new WeedException(errTok, String.format("Illegal modifier: '%s'", errTok.getRaw()));
+                            throw new WeedException(fn.getFilePath(), errTok, String.format("Illegal modifier: '%s'", errTok.getRaw()));
                         } else if (!set.contains(Token.Type.PUBLIC) && !set.contains(Token.Type.PROTECTED)) {
                             Token errTok = ParserUtils.getTokensInTree(cur.children.get(2)).get(0);
-                            throw new WeedException(errTok, String.format("Field '%s' must be either public or protected.", errTok.getRaw()));
+                            throw new WeedException(fn.getFilePath(), errTok, String.format("Field '%s' must be either public or protected.", errTok.getRaw()));
                         }
                         break;
                     }
@@ -266,7 +268,7 @@ public class Parser {
                         // ensure expression in cast is a type...
                         if (cur.prod.rhs[1] == ParseTable.NONT_EXPRESSION && !isTypeNode(cur.children.get(1))) {
                             Token errTok = cur.children.get(0).t;
-                            throw new WeedException(errTok, "Invalid cast expression.");
+                            throw new WeedException(fn.getFilePath(), errTok, "Invalid cast expression.");
                         }
                         break;
                     }
@@ -282,7 +284,7 @@ public class Parser {
 
         if (isClass && !hasConstructor) {
             Token errTok = classTok;
-            throw new WeedException(errTok, String.format("Class '%s' must have at least on constructor.", errTok.getRaw()));
+            throw new WeedException(fn.getFilePath(), errTok, String.format("Class '%s' must have at least on constructor.", errTok.getRaw()));
         }
     }
 
@@ -305,7 +307,7 @@ public class Parser {
 
         Token id = tree.children.get(2).t;
         if (!fn.getFileClassName().equals(id.getRaw())) {
-            throw new WeedException(id,
+            throw new WeedException(fn.getFilePath(), id,
                     String.format("%s '%s' should be declared in a file named '%s.java'", type, id.getRaw(), id.getRaw()));
         } else {
             fn.setClassName(id.getRaw());
@@ -317,7 +319,7 @@ public class Parser {
         for (Token each : toks) {
             if (!set.add(each.getType())) {
                 Token t = each;
-                throw new WeedException(t, String.format("Illegal combination of modifiers: '%s' and '%s'",
+                throw new WeedException(fn.getFilePath(), t, String.format("Illegal combination of modifiers: '%s' and '%s'",
                         t.getRaw(), t.getRaw()));
             }
         }

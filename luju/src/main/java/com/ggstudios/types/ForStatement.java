@@ -8,6 +8,10 @@ public class ForStatement extends Statement {
     private Statement forUpdate;
     private Statement body;
 
+    public ForStatement() {
+        super(Statement.TYPE_FOR);
+    }
+
     public Statement getForInit() {
         return forInit;
     }

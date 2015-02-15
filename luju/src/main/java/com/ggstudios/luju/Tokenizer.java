@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class Tokenizer {
+    private String fileName;
     private BufferedReader in;
     private int row, col;
 
@@ -23,6 +24,7 @@ public class Tokenizer {
 
     private boolean inMlComment = false;
 
+    private static final Map<Character, Character> escapeChar = new HashMap<>();
     private static final Set<Character> termChar = new HashSet<>();
     private static final Map<Character, Token.Type> charToState = new HashMap<>();
     static {
@@ -63,6 +65,14 @@ public class Tokenizer {
         m.put('*', Token.Type.STAR);
         m.put('%', Token.Type.MOD);
 
+        escapeChar.put('b', '\b');
+        escapeChar.put('t', '\t');
+        escapeChar.put('n', '\n');
+        escapeChar.put('f', '\f');
+        escapeChar.put('r', '\r');
+        escapeChar.put('"', '"');
+        escapeChar.put('\'', '\'');
+        escapeChar.put('\\', '\\');
     }
 
 
@@ -145,7 +155,7 @@ public class Tokenizer {
                     raw.append(c);
                     toks.add(new Token(Token.Type.INTLIT, raw.toString(), col, row));
                 } else {
-                    throw new TokenException(new Token(Token.Type.INVALID, Character.toString(line.charAt(col + 1)), col + 1, row),
+                    throw new TokenException(fileName, new Token(Token.Type.INVALID, Character.toString(line.charAt(col + 1)), col + 1, row),
                             "Zero proceeded with '" + line.charAt(col + 1) + "'");
                 }
             } else if (Character.isDigit(c)) {
@@ -227,13 +237,13 @@ public class Tokenizer {
                 }
             } else if (Character.isWhitespace(c)) {
             } else {
-                throw new TokenException(new Token(Token.Type.INVALID, Character.toString(c), col, row),
+                throw new TokenException(fileName, new Token(Token.Type.INVALID, Character.toString(c), col, row),
                         "Invalid token '" + c + "'");
             }
 
             if (toks.size() != 0 && toks.get(toks.size() - 1).getType() == Token.Type.INVALID) {
                 Token t = toks.get(toks.size() - 1);
-                throw new TokenException(t, "Invalid token '" + t.getRaw() + "'");
+                throw new TokenException(fileName, t, "Invalid token '" + t.getRaw() + "'");
             }
         }
     }
@@ -323,7 +333,7 @@ public class Tokenizer {
         col -= 2;
         Token t = new Token(Token.Type.ID, raw.toString(), col - raw.length(), row);
         if (fail)
-            throw new TokenException(t, "Invalid identifier: " + t.getRaw());
+            throw new TokenException(fileName, t, "Invalid identifier: " + t.getRaw());
         return t;
     }
 
@@ -340,11 +350,11 @@ public class Tokenizer {
                 val = val * 10 + (c - '0');
 
                 if (val > 2147483648L) {
-                    throw new TokenException(new Token(Token.Type.INTLIT, raw.toString(), col, row),
+                    throw new TokenException(fileName, new Token(Token.Type.INTLIT, raw.toString(), col, row),
                             "Invalid integer literal: " + raw.toString() + "...");
                 }
             } else {
-                throw new TokenException(new Token(Token.Type.INTLIT, raw.toString(), col, row),
+                throw new TokenException(fileName, new Token(Token.Type.INTLIT, raw.toString(), col, row),
                         "Integer literal cannot be followed by: " + c);
             }
 
@@ -377,15 +387,15 @@ public class Tokenizer {
             col++;
         }
 
-        throw new TokenException(new Token(Token.Type.STRINGLIT, raw.toString(), col - raw.length() - 1, row),
+        throw new TokenException(fileName, new Token(Token.Type.STRINGLIT, raw.toString(), col - raw.length() - 1, row),
                 "Unclosed string literal");
     }
 
     public Token getCharLiteral(String line) {
         char c = line.charAt(col);
-        if (c == '\n' || c == '\'') throw new TokenException(new Token(Token.Type.CHARLIT, "", col - 1, row), "Invalid character literal");
+        if (c == '\n' || c == '\'') throw new TokenException(fileName, new Token(Token.Type.CHARLIT, "", col - 1, row), "Invalid character literal");
         char next = line.charAt(col + 1);
-        if (next == '\n') throw new TokenException(new Token(Token.Type.CHARLIT, "", col - 1, row), "Invalid character literal");
+        if (next == '\n') throw new TokenException(fileName, new Token(Token.Type.CHARLIT, "", col - 1, row), "Invalid character literal");
 
         if (c == '\\') {
             raw.append(c);
@@ -399,9 +409,9 @@ public class Tokenizer {
 
         if (next != '\'') {
             if (next == '\n') {
-                throw new TokenException(new Token(Token.Type.CHARLIT, "", col - 1, row), "Unclosed character literal");
+                throw new TokenException(fileName, new Token(Token.Type.CHARLIT, "", col - 1, row), "Unclosed character literal");
             } else {
-                throw new TokenException(new Token(Token.Type.CHARLIT, "", col - 1, row), "Too many characters in character literal");
+                throw new TokenException(fileName, new Token(Token.Type.CHARLIT, "", col - 1, row), "Too many characters in character literal");
             }
         }
 
@@ -421,7 +431,8 @@ public class Tokenizer {
             case '"':
             case '\'':
             case '\\':
-                raw.append(c);
+                raw.setLength(raw.length() - 1);
+                raw.append(escapeChar.get(c));
                 break;
             case '0':
             case '1':
@@ -448,12 +459,13 @@ public class Tokenizer {
                 col--;
                 break;
             default:
-                throw new TokenException(new Token(Token.Type.CHARLIT, "", col + 3, row), "Illegal escape character.");
+                throw new TokenException(fileName, new Token(Token.Type.CHARLIT, "", col + 3, row), "Illegal escape character.");
         }
     }
 
     public List<Token> tokenizeWith(String fileName) {
-        toks = new ArrayList<Token>();
+        this.fileName = fileName;
+        toks = new ArrayList<>();
 
         row = 1;
         col = 0;
@@ -473,7 +485,7 @@ public class Tokenizer {
 
             if (inMlComment) {
                 Token t = toks.get(toks.size() - 1);
-                throw new TokenException(t, "Unclosed comment");
+                throw new TokenException(fileName, t, "Unclosed comment");
             }
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -495,7 +507,7 @@ public class Tokenizer {
         for (int i = 0; i < s.length(); i++) {
             int c = s.charAt(i);
             if (c > 0x7F) {
-                throw new TokenException(new Token(Token.Type.INVALID, "", i, row), "Non ASCII characters are not supported: " + ((char)c));
+                throw new TokenException(fileName, new Token(Token.Type.INVALID, "", i, row), "Non ASCII characters are not supported: " + ((char)c));
             }
         }
     }

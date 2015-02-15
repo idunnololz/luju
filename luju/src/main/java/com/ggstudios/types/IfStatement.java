@@ -9,6 +9,10 @@ public class IfStatement extends Statement {
     private List<IfBlock> ifBlocks = new ArrayList<>();
     private ElseBlock elseBlock;
 
+    public IfStatement() {
+        super(Statement.TYPE_IF);
+    }
+
     public void addIfBlock(Expression expr, Statement st) {
         ifBlocks.add(new IfBlock(expr, st));
     }
@@ -62,6 +66,7 @@ public class IfStatement extends Statement {
         private Statement body;
 
         public IfBlock(Expression condition, Statement body) {
+            super(Statement.TYPE_IF_BLOCK);
             this.condition = condition;
             this.body = body;
         }
@@ -71,6 +76,7 @@ public class IfStatement extends Statement {
         private Statement elseStatement;
 
         public ElseBlock(Statement elseStatement) {
+            super(Statement.TYPE_ELSE_BLOCK);
             this.elseStatement = elseStatement;
         }
     }

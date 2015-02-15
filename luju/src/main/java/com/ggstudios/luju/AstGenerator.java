@@ -21,7 +21,6 @@ import com.ggstudios.types.LiteralExpression;
 import com.ggstudios.types.MethodExpression;
 import com.ggstudios.types.NameVariable;
 import com.ggstudios.types.ThisExpression;
-import com.ggstudios.types.TypeExpression;
 import com.ggstudios.types.UnaryExpression;
 import com.ggstudios.types.VarDecl;
 import com.ggstudios.types.VarInitDecl;
@@ -32,12 +31,9 @@ import com.ggstudios.types.ReturnStatement;
 import com.ggstudios.types.Statement;
 import com.ggstudios.types.TypeDecl;
 import com.ggstudios.types.ReferenceType;
-import com.ggstudios.types.Variable;
 import com.ggstudios.types.WhileStatement;
 import com.ggstudios.utils.ListUtils;
 import com.ggstudios.utils.ParserUtils;
-import com.ggstudios.utils.Print;
-import com.ggstudios.utils.PrintUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,7 +70,7 @@ public class AstGenerator {
 
     private InterfaceDecl doInterfaceDecl(Node node) {
         // interfaceDeclaration -> optModifiers INTERFACE ID optExtendsInterfaces interfaceBody
-        InterfaceDecl decl = new InterfaceDecl();
+        InterfaceDecl decl = new InterfaceDecl(fn.getPackageName());
         Token landmark = getFirstTokensInTree(node);
         decl.setPos(landmark.getRow(), landmark.getCol());
         decl.setTypeName(node.children.get(2).t.getRaw());
@@ -124,7 +120,7 @@ public class AstGenerator {
 
     private ClassDecl doClassDecl(Node node) {
         // classDeclaration -> optModifiers CLASS ID optSuper optInterfaces classBody
-        ClassDecl decl = new ClassDecl();
+        ClassDecl decl = new ClassDecl(fn.getPackageName());
         Token landmark = getFirstTokensInTree(node);
         decl.setPos(landmark.getRow(), landmark.getCol());
         decl.setTypeName(node.children.get(2).t.getRaw());
@@ -282,7 +278,7 @@ public class AstGenerator {
             List<Node> formalParameters = listFromTree(formalParameterList, 0, 2);
 
             // formalParameter -> type variableDeclaratorId
-            for (Node n : formalParameters) {
+            for (Node n : ListUtils.reverse(formalParameters)) {
                 VarDecl arg = new VarDecl();
                 Token argLandmark = getFirstTokensInTree(n.children.get(1));
                 arg.setPos(argLandmark.getRow(), argLandmark.getCol());
@@ -615,10 +611,9 @@ public class AstGenerator {
         switch (leftHandSide.prod.rhs[0]) {
             case ParseTable.NONT_NAME:
                 Node name = unk;
-                NameVariable nVar = new NameVariable();
+                NameVariable nVar = new NameVariable(ParserUtils.getIdSeqInTree(name));
                 Token varToken = getFirstTokensInTree(name);
                 nVar.setPos(varToken.getRow(), varToken.getCol());
-                nVar.setId(varToken);
                 v = nVar;
                 break;
             case ParseTable.NONT_FIELDACCESS:
@@ -903,7 +898,7 @@ public class AstGenerator {
                                     last = expr;
                                     unaryExpressionNotPlusMinus = castExpression.children.get(3);
                                 } else {
-                                    throw new AstException(expr,
+                                    throw new AstException(fn.getFilePath(), expr,
                                             "Invalid cast expression. Expression: " +
                                                     e.getClass().getSimpleName() + ": " + e.toString());
                                 }
@@ -937,13 +932,10 @@ public class AstGenerator {
             ArrayCreationExpression expr = new ArrayCreationExpression();
             expr.setPos(arrayCreationExpression.children.get(0).t);
 
-            TypeExpression typeExpr = new TypeExpression();
             List<Token> toks = ParserUtils.getTokensInTree(arrayCreationExpression.children.get(1));
-            for (Token t : ListUtils.reverse(toks)) {
-                if (t.getType() != Token.Type.DOT)
-                    typeExpr.addId(t);
-            }
-            expr.setTypeExpr(typeExpr);
+            ReferenceType refType = new ReferenceType(toks, false);
+            refType.setPos(toks.get(0));
+            expr.setTypeExpr(refType);
             // dimExpr -> LBRACKET expression RBRACKET
             expr.setDimExpr(getExpression(arrayCreationExpression.children.get(2).children.get(1)));
             return expr;
@@ -995,7 +987,7 @@ public class AstGenerator {
         switch (t.getType()) {
             case INTLIT:
                 if (t.getVal() > Integer.MAX_VALUE || t.getVal() < Integer.MIN_VALUE) {
-                    throw new WeedException(t, String.format("Integer '%d' out of bounds", t.getVal()));
+                    throw new WeedException(fn.getFilePath(), t, String.format("Integer '%d' out of bounds", t.getVal()));
                 }
                 break;
         }
@@ -1041,12 +1033,8 @@ public class AstGenerator {
     }
 
     private NameVariable getName(Node name) {
-        NameVariable nVar = new NameVariable();
-        List<Token> toks = ParserUtils.getTokensInTree(name);
-        for (Token t : ListUtils.reverse(toks)) {
-            if (t.getType() != Token.Type.DOT)
-                nVar.addId(t);
-        }
+        List<Token> toks = ParserUtils.getIdSeqInTree(name);
+        NameVariable nVar = new NameVariable(toks);
         return nVar;
     }
 
@@ -1054,7 +1042,7 @@ public class AstGenerator {
         // classInstanceCreationExpression -> NEW classType LPAREN optArgumentList RPAREN
         ICreationExpression iExpr = new ICreationExpression();
         iExpr.setPos(classInstanceCreationExpression.children.get(0).t);
-        iExpr.setClassName(nameFromNode(classInstanceCreationExpression.children.get(1)));
+        iExpr.setType(new ReferenceType(ParserUtils.getIdSeqInTree(classInstanceCreationExpression.children.get(1)), false));
         iExpr.setArgList(getOptArgumentList(classInstanceCreationExpression.children.get(3)));
         return iExpr;
     }
@@ -1097,12 +1085,11 @@ public class AstGenerator {
         // importDeclarations -> importDeclarations importDeclaration
 
         if (node.children.size() != 0) {
-            Node imports = node.children.get(0);
-            while (imports.children.size() == 2) {
-                doImportDecl(imports.children.get(1));
-                imports = imports.children.get(0);
+            Node importDeclarations = node.children.get(0);
+            List<Node> importDeclarationss = listFromTree(importDeclarations);
+            for (Node n : ListUtils.reverse(importDeclarationss)) {
+                doImportDecl(n);
             }
-            doImportDecl(imports.children.get(0));
         }
     }
 

@@ -6,6 +6,8 @@ public class LiteralExpression extends Expression {
     private Token literal;
 
     public LiteralExpression(Token literal) {
+        setType(LITERAL_EXPRESSION);
+
         this.literal = literal;
         setPos(literal.getRow(), literal.getCol());
     }

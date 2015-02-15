@@ -13,6 +13,10 @@ public class VarDecl extends Statement {
 
     private Token id;
 
+    public VarDecl() {
+        super(Statement.TYPE_VARDECL);
+    }
+
     public Set<Token.Type> getModifiers() {
         return modifiers;
     }
@@ -46,5 +50,9 @@ public class VarDecl extends Statement {
         sb.append(id.getRaw());
         sb.append(")");
 
+    }
+
+    public String getName() {
+        return id.getRaw();
     }
 }

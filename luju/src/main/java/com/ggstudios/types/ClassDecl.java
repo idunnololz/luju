@@ -12,7 +12,8 @@ public class ClassDecl extends TypeDecl {
 
     private String superTypeName;
 
-    public ClassDecl() {
+    public ClassDecl(String packageName) {
+        super(packageName);
         setDeclType("Class");
     }
 

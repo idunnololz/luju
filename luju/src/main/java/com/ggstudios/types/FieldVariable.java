@@ -2,10 +2,7 @@ package com.ggstudios.types;
 
 import com.ggstudios.luju.Token;
 
-import java.util.ArrayList;
-import java.util.List;
-
-public class FieldVariable extends Variable {
+public class FieldVariable extends VariableExpression {
     private Token id;
     private Expression prefixExpr;
 
@@ -19,9 +16,11 @@ public class FieldVariable extends Variable {
     @Override
     public String getName() {
         StringBuilder sb = new StringBuilder();
+//        sb.append("f(");
         sb.append(prefixExpr.toString());
         sb.append(".");
         sb.append(id.getRaw());
+//        sb.append(")");
         return sb.toString();
     }
 }

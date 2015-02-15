@@ -6,6 +6,10 @@ public class UnaryExpression extends Expression {
     private Token op;
     private Expression expression;
 
+    public UnaryExpression() {
+        setType(UNARY_EXPRESSION);
+    }
+
     public Token getOp() {
         return op;
     }

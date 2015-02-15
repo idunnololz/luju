@@ -1,5 +1,6 @@
 package com.ggstudios.luju;
 
+import com.ggstudios.env.Environment;
 import com.ggstudios.types.TypeDecl;
 import com.ggstudios.utils.Print;
 import com.ggstudios.utils.PrintUtils;
@@ -19,7 +20,11 @@ public class FileNode {
 
     private TypeDecl typeDecl;
 
-    public FileNode() {}
+    private Environment env;
+
+    public FileNode() {
+        imports.add("java.lang.*");
+    }
 
     public String getFilePath() {
         return filePath;
@@ -92,5 +97,13 @@ public class FileNode {
 
     public void setTypeDecl(TypeDecl typeDecl) {
         this.typeDecl = typeDecl;
+    }
+
+    public Environment getEnv() {
+        return env;
+    }
+
+    public void setEnv(Environment env) {
+        this.env = env;
     }
 }

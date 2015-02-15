@@ -9,11 +9,16 @@ import java.util.List;
 import java.util.Set;
 
 public class TypeDecl extends AstNode {
+    private String packageName;
     private Set<Token.Type> modifiers = new HashSet<>();
     private List<MethodDecl> methDecls = new ArrayList<>();
     private String typeName;
 
     private String declType;
+
+    public TypeDecl(String packageName) {
+        this.packageName = packageName;
+    }
 
     public String getTypeName() {
         return typeName;
@@ -52,7 +57,7 @@ public class TypeDecl extends AstNode {
         }
     }
 
-    protected String getDeclType() {
+    public String getDeclType() {
         return declType;
     }
 
@@ -66,5 +71,9 @@ public class TypeDecl extends AstNode {
 
     public void addMethodDeclaration(MethodDecl methDecl) {
         methDecls.add(methDecl);
+    }
+
+    public String getPackage() {
+        return packageName;
     }
 }

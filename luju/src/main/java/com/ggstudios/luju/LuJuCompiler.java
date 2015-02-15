@@ -1,14 +1,19 @@
 package com.ggstudios.luju;
 
+import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.error.ParseException;
 import com.ggstudios.error.TokenException;
 import com.ggstudios.error.WeedException;
+import com.ggstudios.types.AstNode;
 import com.ggstudios.utils.ExceptionUtils;
 import com.ggstudios.utils.Print;
 
 import java.io.BufferedReader;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Stack;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -20,6 +25,11 @@ public class LuJuCompiler {
     public static final int RETURN_CODE_SUCCESS = 0;
     public static final int RETURN_CODE_ERROR = 42;
     public static final int RETURN_CODE_FATAL_ERROR = 43;
+
+    private static final Set<String> stdPackage = new HashSet<>();
+    static {
+        stdPackage.add("java.lang");
+    }
 
     private ExecutorService executor;
     private WorkerPool workerPool;
@@ -34,6 +44,8 @@ public class LuJuCompiler {
         workerPool.ensureNoLostWorker();
     }
 
+    private HashMap<String, FileNode> cachedFileNodes = new HashMap<>();
+
     public int compileWith(final Main.ArgList args) {
         final Ast ast = new Ast();
 
@@ -42,9 +54,15 @@ public class LuJuCompiler {
         final Result result = new Result();
 
         for (final String fileName : args.fileNames) {
-            FileNodeWorker worker = workerPool.getWorker();
-            worker.setup(args, ast, fileName, doneSignal, result);
-            executor.execute(worker);
+            FileNode fn;
+            if (args.useCache && (fn = cachedFileNodes.get(fileName)) != null) {
+                ast.addFileNode(fn);
+                doneSignal.countDown();
+            } else {
+                FileNodeWorker worker = workerPool.getWorker();
+                worker.setup(args, ast, fileName, doneSignal, result);
+                executor.execute(worker);
+            }
         }
 
         try {
@@ -58,11 +76,23 @@ public class LuJuCompiler {
             return processError(result.error);
         }
 
-        if (args.isPrintAst()) {
-            Print.ln(ast.toPrettyString());
+        if (args.useCache && cachedFileNodes.size() == 0) {
+            for (int i = 0; i < ast.size(); i++) {
+                cachedFileNodes.put(ast.get(i).getFilePath(), ast.get(i));
+            }
         }
 
-        nameResolver.resolveNames(ast);
+        if (args.isPrintAst()) {
+            Print.ln(ast.toPrettyString(stdPackage));
+        }
+
+        try {
+            nameResolver.resolveNames(ast);
+        } catch (NameResolutionException e) {
+            AstNode n = e.getNode();
+            Print.e(String.format("LuJu: %s: NameResolutionException(%d, %d): %s", e.getFile(), n.getRow(), n.getCol(), e.getMessage()));
+            return processError(RETURN_CODE_ERROR);
+        }
 
         return RETURN_CODE_SUCCESS;
     }
@@ -136,7 +166,7 @@ public class LuJuCompiler {
                 }
             } catch (TokenException e) {
                 Token t = e.getToken();
-                Print.e(String.format("LuJu: TokenException(%d, %d): %s", t.getRow(), t.getCol(), e.getMessage()));
+                Print.e(String.format("LuJu: %s: TokenException(%d, %d): %s", e.getFile(), t.getRow(), t.getCol(), e.getMessage()));
 
                 return null;
             }
@@ -157,12 +187,12 @@ public class LuJuCompiler {
                 astGenerator.generateAst(fn, n);
             } catch (ParseException e) {
                 Token t = e.getToken();
-                Print.e(String.format("LuJu: ParseException(%d, %d): %s", t.getRow(), t.getCol(), e.getMessage()));
+                Print.e(String.format("LuJu: %s: ParseException(%d, %d): %s",  e.getFile(), t.getRow(), t.getCol(), e.getMessage()));
 
                 return null;
             } catch (WeedException e) {
                 Token t = e.getToken();
-                Print.e(String.format("LuJu: ParseException(%d, %d): %s", t.getRow(), t.getCol(), e.getMessage()));
+                Print.e(String.format("LuJu: %s: ParseException(%d, %d): %s",  e.getFile(), t.getRow(), t.getCol(), e.getMessage()));
 
                 return null;
             }

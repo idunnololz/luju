@@ -15,8 +15,18 @@ public class TestSuite {
     private LuJuCompiler compiler;
     private int testCount, testPassed, testFailed;
 
+    private static final String STDLIB_DIR = "stdlib/2.0/java";
+
+    private static final Main.ArgList defaultTestArgs = new Main.ArgList();
+
     public TestSuite() {
         compiler = new LuJuCompiler(Main.ArgList.DEFAULT_THREADS);
+        defaultTestArgs.useCache = true;
+        try {
+            addStdlib(defaultTestArgs);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void runTests(int assignmentNumber) {
@@ -52,7 +62,7 @@ public class TestSuite {
     private void runTest(File testFile) throws IOException {
         testCount++;
 
-        Main.ArgList args = new Main.ArgList();
+        Main.ArgList args = new Main.ArgList(defaultTestArgs);
         args.fileNames.add(testFile.getCanonicalPath());
 
         if (testFile.getName().startsWith("Je")) {
@@ -79,7 +89,7 @@ public class TestSuite {
     private void runTestDirectory(File testDir) throws IOException {
         testCount++;
 
-        Main.ArgList args = new Main.ArgList();
+        Main.ArgList args = new Main.ArgList(defaultTestArgs);
         List<File> files = FileUtils.getFilesInDirRecursive(testDir);
         for (File f : files) {
             args.fileNames.add(f.getCanonicalPath());
@@ -104,6 +114,14 @@ public class TestSuite {
                 System.out.println(String.format("[Fail] Correct test %s", testDir.getName()));
             }
         }
+    }
+
+    private void addStdlib(Main.ArgList args) throws IOException {
+        List<File> files = FileUtils.getFilesInDirRecursive(new File(STDLIB_DIR));
+        for (File f : files) {
+            args.fileNames.add(f.getCanonicalPath());
+        }
+
     }
 
 }

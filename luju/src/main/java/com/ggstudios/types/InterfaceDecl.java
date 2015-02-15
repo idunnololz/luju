@@ -8,7 +8,8 @@ import java.util.List;
 public class InterfaceDecl extends TypeDecl {
     private List<String> extendsList = new ArrayList<>();
 
-    public InterfaceDecl() {
+    public InterfaceDecl(String packageName) {
+        super(packageName);
         setDeclType("Interface");
     }
 

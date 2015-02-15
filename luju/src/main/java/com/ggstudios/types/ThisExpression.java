@@ -6,6 +6,7 @@ public class ThisExpression extends Expression {
     private Token thisToken;
 
     public ThisExpression(Token thisToken) {
+        setType(THIS_EXPRESSION);
         this.thisToken = thisToken;
         setPos(thisToken.getRow(), thisToken.getCol());
     }

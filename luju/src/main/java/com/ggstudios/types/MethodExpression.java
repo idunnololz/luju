@@ -3,8 +3,12 @@ package com.ggstudios.types;
 import java.util.List;
 
 public class MethodExpression extends Expression {
-    private Variable methodIdExpr;
+    private VariableExpression methodIdExpr;
     private List<Expression> argList;
+
+    public MethodExpression() {
+        setType(METHOD_EXPRESSION);
+    }
 
     public List<Expression> getArgList() {
         return argList;
@@ -18,7 +22,7 @@ public class MethodExpression extends Expression {
         return methodIdExpr;
     }
 
-    public void setMethodIdExpr(Variable methodIdExpr) {
+    public void setMethodIdExpr(VariableExpression methodIdExpr) {
         this.methodIdExpr = methodIdExpr;
     }
 

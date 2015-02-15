@@ -8,6 +8,7 @@ public class ExpressionStatement extends Statement {
     private Expression expr;
 
     public ExpressionStatement(Expression expr) {
+        super(Statement.TYPE_EXPRESSION);
         this.expr = expr;
     }
 

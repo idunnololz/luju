@@ -7,6 +7,10 @@ public class WhileStatement extends Statement {
     private Expression condition;
     private Statement body;
 
+    public WhileStatement() {
+        super(Statement.TYPE_WHILE);
+    }
+
     public Expression getCondition() {
         return condition;
     }

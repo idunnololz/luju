@@ -7,6 +7,10 @@ public class BinaryExpression extends Expression {
     private Expression leftExpr;
     private Expression rightExpr;
 
+    public BinaryExpression() {
+        setType(BINARY_EXPRESSION);
+    }
+
     public Expression getLeftExpr() {
         return leftExpr;
     }

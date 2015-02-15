@@ -5,8 +5,14 @@ import com.ggstudios.luju.Token;
 import java.util.ArrayList;
 import java.util.List;
 
-public class NameVariable extends Variable {
+public class NameVariable extends VariableExpression {
     private List<Token> idSeq = new ArrayList<>();
+
+    public NameVariable() {}
+
+    public NameVariable(List<Token> isSeq) {
+        this.idSeq = isSeq;
+    }
 
     @Override
     public String getName() {
@@ -35,5 +41,9 @@ public class NameVariable extends Variable {
 
     public void addId(Token id) {
         idSeq.add(id);
+    }
+
+    public List<Token> getIdSeq() {
+        return idSeq;
     }
 }

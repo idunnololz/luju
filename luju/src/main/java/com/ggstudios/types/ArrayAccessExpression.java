@@ -4,6 +4,10 @@ public class ArrayAccessExpression extends Expression {
     private Expression arrayExpr;
     private Expression indexExpr;
 
+    public ArrayAccessExpression() {
+        setType(ARRAY_ACCESS_EXPRESSION);
+    }
+
     public Expression getArrayExpr() {
         return arrayExpr;
     }

@@ -8,6 +8,10 @@ import java.util.List;
 public class Block extends Statement {
     private List<Statement> statements = new ArrayList<>();
 
+    public Block() {
+        super(Statement.TYPE_BLOCK);
+    }
+
     public void toPrettyString(StringBuilder sb, int level) {
         PrintUtils.level(sb, level);
 
@@ -23,7 +27,7 @@ public class Block extends Statement {
         sb.setLength(sb.length() - 1);
     }
 
-    public List<Statement> getLocalDeclarations() {
+    public List<Statement> getStatements() {
         return statements;
     }
 

@@ -2,9 +2,17 @@ package com.ggstudios.types;
 
 import java.util.List;
 
+/**
+ * Class instance creation...
+ * Of the form: NEW classType LPAREN optArgumentList RPAREN
+ */
 public class ICreationExpression extends Expression {
-    private String className;
+    private ReferenceType type;
     private List<Expression> argList;
+
+    public ICreationExpression() {
+        setType(ICREATION_EXPRESSION);
+    }
 
     public List<Expression> getArgList() {
         return argList;
@@ -14,11 +22,11 @@ public class ICreationExpression extends Expression {
         this.argList = argList;
     }
 
-    public String getClassName() {
-        return className;
+    public ReferenceType getType() {
+        return type;
     }
 
-    public void setClassName(String className) {
-        this.className = className;
+    public void setType(ReferenceType type) {
+        this.type = type;
     }
 }

@@ -15,6 +15,7 @@ import java.util.List;
 public class Main {
 
     private static final String TEST_DIR = "luju/src/tests/";
+    private static final String STDLIB_DIR = "stdlib/";
 
     public static void main(String[] args) {
         String[] a;
@@ -24,8 +25,10 @@ public class Main {
                     //"-t",
                     //"-p",
                     "-A",
-                    "-d", TEST_DIR + "tok/Test1"
-                    //TEST_DIR + "tok/Test.java"
+                    "-d", TEST_DIR + "Test2",
+                    //TEST_DIR + "Je_4_DuplicateMethodDeclare_ArrayArgs.java",
+                    "-d", STDLIB_DIR + "2.0/java"
+                    //TEST_DIR + "Test.java"
             };
         } else {
             a = args;
@@ -95,7 +98,11 @@ public class Main {
                         break;
                 }
             } else {
-                argList.fileNames.add(flag);
+                try {
+                    argList.fileNames.add(new File(flag).getCanonicalPath());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
 
@@ -135,6 +142,18 @@ public class Main {
         public List<String> fileNames = new ArrayList<>();
         public int flags = FLAG_ALL;
         public int assignmentNumber;
+
+        public boolean useCache = false;
+
+        public ArgList() {}
+
+        public ArgList(ArgList a) {
+            maxThreads = a.maxThreads;
+            fileNames.addAll(a.fileNames);
+            flags = a.flags;
+            assignmentNumber = a.assignmentNumber;
+            useCache = a.useCache;
+        }
 
         public boolean isTokenizeEnabled() {
             return (flags & FLAG_TOKENIZE) != 0;

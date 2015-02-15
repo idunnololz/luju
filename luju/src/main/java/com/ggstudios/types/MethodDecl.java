@@ -1,5 +1,6 @@
 package com.ggstudios.types;
 
+import com.ggstudios.env.Method;
 import com.ggstudios.luju.Token;
 import com.ggstudios.utils.PrintUtils;
 
@@ -14,6 +15,7 @@ public class MethodDecl extends AstNode {
     private Token methodName;
     private List<VarDecl> arguments = new ArrayList<>();
     private Block block;
+    private Method method;
 
     public Set<Token.Type> getModifiers() {
         return modifiers;
@@ -76,5 +78,17 @@ public class MethodDecl extends AstNode {
 
     public void setBlock(Block block) {
         this.block = block;
+    }
+
+    public void setMethod(Method method) {
+        this.method = method;
+    }
+
+    public Method getMethod() {
+        return method;
+    }
+
+    public boolean isAbstract() {
+        return false;
     }
 }
