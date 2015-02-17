@@ -1,21 +1,18 @@
 package com.ggstudios.env;
 
-import com.ggstudios.error.NameResolutionException;
-import com.ggstudios.types.ClassDecl;
 import com.ggstudios.types.TypeDecl;
-import com.ggstudios.types.VarDecl;
 
-public class PrimitiveClazz extends Clazz {
-    private Clazz arrayClass;
+public class PrimitiveClass extends Class {
+    private Class arrayClass;
     private String typeName;
 
-    public PrimitiveClazz(String typeName) {
+    public PrimitiveClass(String typeName) {
         this.typeName = typeName;
-        arrayClass = new ArrayClazz(this);
+        arrayClass = new ArrayClass(this);
     }
 
     @Override
-    public Clazz getArrayClass() {
+    public Class getArrayClass() {
         return arrayClass;
     }
 

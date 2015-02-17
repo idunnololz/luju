@@ -23,21 +23,21 @@ public class BaseEnvironment extends Environment {
     // and D is the class will be stored as a map: {a:{b:{c:{D:ClassInfo, ...}, ...}, ...}, ...}
     private Map<String, Object> baseMap = new HashMap<>();
 
-    private List<Clazz> allClasses = new ArrayList<>();
+    private List<Class> allClasses = new ArrayList<>();
 
     private static final String[] PRIMITIVE_TYPES = {
         "int", "boolean", "short", "char", "void", "byte"
     };
 
-    public static final Clazz TYPE_INT = new PrimitiveClazz("int");
-    public static final Clazz TYPE_BOOLEAN = new PrimitiveClazz("boolean");
-    public static final Clazz TYPE_SHORT = new PrimitiveClazz("short");
-    public static final Clazz TYPE_CHAR = new PrimitiveClazz("char");
-    public static final Clazz TYPE_VOID = new PrimitiveClazz("void");
-    public static final Clazz TYPE_BYTE = new PrimitiveClazz("byte");
-    public static final Clazz TYPE_NULL = new PrimitiveClazz("null");
-    public static Clazz TYPE_OBJECT;
-    public static Clazz TYPE_STRING;
+    public static final Class TYPE_INT = new PrimitiveClass("int");
+    public static final Class TYPE_BOOLEAN = new PrimitiveClass("boolean");
+    public static final Class TYPE_SHORT = new PrimitiveClass("short");
+    public static final Class TYPE_CHAR = new PrimitiveClass("char");
+    public static final Class TYPE_VOID = new PrimitiveClass("void");
+    public static final Class TYPE_BYTE = new PrimitiveClass("byte");
+    public static final Class TYPE_NULL = new PrimitiveClass("null");
+    public static Class TYPE_OBJECT;
+    public static Class TYPE_STRING;
 
     public BaseEnvironment(Ast ast) {
         int len = ast.size();
@@ -46,11 +46,11 @@ public class BaseEnvironment extends Environment {
             FileNode fn = ast.get(i);
             TypeDecl decl = fn.getTypeDecl();
 
-            Clazz cm;
+            Class cm;
             if (decl instanceof InterfaceDecl) {
                 cm = new Interface(decl, fn.getFilePath());
             } else {
-                cm = new Clazz(decl, fn.getFilePath());
+                cm = new Class(decl, fn.getFilePath());
             }
 
             allClasses.add(cm);
@@ -69,19 +69,19 @@ public class BaseEnvironment extends Environment {
         baseMap.put("null", TYPE_NULL);
     }
 
-    public List<Clazz> getAllClasses() {
+    public List<Class> getAllClasses() {
         return allClasses;
     }
 
     @SuppressWarnings("unchecked")
-    private void addEntry(String packageName, Clazz cMap) {
+    private void addEntry(String packageName, Class cMap) {
         String[] seq = packageName.split("\\.");
         Map<String, Object> m = baseMap;
         for (String s : seq) {
             if (m.containsKey(s)) {
                 Object o = m.get(s);
-                if (o instanceof Clazz) {
-                    Clazz cm = (Clazz) o;
+                if (o instanceof Class) {
+                    Class cm = (Class) o;
                     throw new NameResolutionException(cm.getFileName(), cm.getClassDecl(),
                             String.format("%s name '%s' clashes with package of the same name.",
                                     cm.getDeclType(), cm.getName()));
@@ -98,8 +98,8 @@ public class BaseEnvironment extends Environment {
         Object o = m.put(cMap.getName(), cMap);
         if (o != null) {
             // name clash...
-            if (o instanceof Clazz) {
-                Clazz cm = (Clazz) o;
+            if (o instanceof Class) {
+                Class cm = (Class) o;
                 throw new NameResolutionException(cm.getFileName(), cm.getClassDecl(),
                         String.format("%s name '%s' clashes with another class of the same name.",
                                 cm.getDeclType(), cm.getName()));
@@ -112,15 +112,15 @@ public class BaseEnvironment extends Environment {
     }
 
     @SuppressWarnings("unchecked")
-    public List<Clazz> getAllClassesInPackage(String packageName) {
+    public List<Class> getAllClassesInPackage(String packageName) {
         String[] name = packageName.split("\\.");
-        List<Clazz> classes = new ArrayList<>();
+        List<Class> classes = new ArrayList<>();
 
         Map<String, Object> m = baseMap;
         for (String s : name) {
             if (m.containsKey(s)) {
                 Object o = m.get(s);
-                if (o instanceof Clazz) {
+                if (o instanceof Class) {
                     throw new EnvironmentException("Given package name refers to a class. Given: " + packageName,
                             EnvironmentException.ERROR_PACKAGE_IS_CLASS);
                 }
@@ -131,8 +131,8 @@ public class BaseEnvironment extends Environment {
         }
 
         for (Map.Entry<String, Object> elem : m.entrySet()) {
-            if (elem.getValue() instanceof Clazz) {
-                classes.add((Clazz) elem.getValue());
+            if (elem.getValue() instanceof Class) {
+                classes.add((Class) elem.getValue());
             }
         }
         return classes;
@@ -147,8 +147,8 @@ public class BaseEnvironment extends Environment {
 
             if (m.containsKey(s)) {
                 Object o = m.get(s);
-                if (o instanceof Clazz) {
-                    Clazz cm = (Clazz) o;
+                if (o instanceof Class) {
+                    Class cm = (Class) o;
                     if (name.length == i + 1) {
                         return new LookupResult(cm, i + 1);
                     } else {

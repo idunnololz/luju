@@ -1,6 +1,6 @@
 package com.ggstudios.types;
 
-import com.ggstudios.env.Clazz;
+import com.ggstudios.env.Class;
 import com.ggstudios.luju.Token;
 
 import java.util.List;
@@ -11,7 +11,7 @@ public class ReferenceType extends Expression {
 
     private String[] typeArr;
 
-    private Clazz clazz;
+    private Class clazz;
 
     public ReferenceType(NameVariable nVar, boolean isArray) {
         setType(REFERENCE_TYPE);
@@ -72,11 +72,11 @@ public class ReferenceType extends Expression {
         return type;
     }
 
-    public Clazz getProper() {
+    public Class getProper() {
         return clazz;
     }
 
-    public void setProper(Clazz clazz) {
+    public void setProper(Class clazz) {
         this.clazz = clazz;
     }
 }

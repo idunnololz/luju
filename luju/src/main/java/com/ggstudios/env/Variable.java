@@ -10,7 +10,7 @@ public class Variable extends Field {
     }
 
     @Override
-    public Clazz getDeclaringClass() {
+    public Class getDeclaringClass() {
         throw new TypeException(getDeclaringClass().getFileName(), getVarDecl(),
                 String.format("Local variable '%s' does not have a declaring class.", getName()));
     }

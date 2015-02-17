@@ -6,15 +6,15 @@ import com.ggstudios.types.ReferenceType;
 public abstract class Environment {
     public abstract LookupResult lookupName(String[] name);
 
-    public Clazz lookupClazz(ReferenceType type) {
+    public Class lookupClazz(ReferenceType type) {
         return lookupClazz(type.getTypeAsArray(), type.isArray());
     }
 
-    public Clazz lookupClazz(String name, boolean isArray) {
+    public Class lookupClazz(String name, boolean isArray) {
         return lookupClazz(name.split("\\."), isArray);
     }
 
-    public Clazz lookupClazz(String[] name, boolean isArray) {
+    public Class lookupClazz(String[] name, boolean isArray) {
         CompositeEnvironment thisComp = null;
         if (this instanceof LocalVariableEnvironment) {
             thisComp = ((LocalVariableEnvironment) this).getClassScopeEnv();
@@ -30,7 +30,7 @@ public abstract class Environment {
             r = lookupName(name);
         }
 
-        if (r == null || r.result == null || !(r.result instanceof Clazz) || r.tokensConsumed != name.length) {
+        if (r == null || r.result == null || !(r.result instanceof Class) || r.tokensConsumed != name.length) {
             throw new EnvironmentException("Could not find class: " + nameListToName(name), EnvironmentException.ERROR_NOT_FOUND,
                     nameListToName(name));
         }
@@ -39,9 +39,9 @@ public abstract class Environment {
                     r.result);
         }
         if (isArray) {
-            return ((Clazz) r.result).getArrayClass();
+            return ((Class) r.result).getArrayClass();
         }
-        return (Clazz) r.result;
+        return (Class) r.result;
     }
 
     public Field lookupField(String name) {
@@ -80,5 +80,19 @@ public abstract class Environment {
         }
         sb.setLength(sb.length() - 1);
         return sb.toString();
+    }
+
+    public Constructor lookupConstructor(String name) {
+        return lookupConstructor(name.split("\\."));
+    }
+
+    public Constructor lookupConstructor(String[] name) {
+        LookupResult r = lookupName(name);
+        if (r == null || r.result == null || !(r.result instanceof Constructor) || r.tokensConsumed != name.length) {
+            String fullName = nameListToName(name);
+            throw new EnvironmentException("Could not find constructor: " + fullName, EnvironmentException.ERROR_NOT_FOUND,
+                    fullName);
+        }
+        return (Constructor) r.result;
     }
 }

@@ -2,34 +2,29 @@ package com.ggstudios.env;
 
 import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.error.NameResolutionException;
-import com.ggstudios.types.MethodDecl;
+import com.ggstudios.types.ConstructorDecl;
 import com.ggstudios.types.VarDecl;
 
 import java.util.List;
 
-public class Method {
-    private final Class declaringClass;
-    private final MethodDecl methodDecl;
+public class Constructor {
+    private Class declaringClass;
+    private int modifiers;
     private String name;
 
-    private Class returnType;
     private Class[] parameterTypes;
 
-    private int modifiers;
+    private String signature;
+    private ConstructorDecl constructorDecl;
 
-    public Method(Class declaringClass, MethodDecl methodDecl, CompositeEnvironment env) {
-        this.declaringClass = declaringClass;
-        this.methodDecl = methodDecl;
-        name = methodDecl.getMethodName().getRaw();
+    public Constructor(Class c, ConstructorDecl cd, Environment env) {
+        declaringClass = c;
+        modifiers = cd.getModifiers();
+        constructorDecl = cd;
 
-        try {
-            returnType = env.lookupClazz(methodDecl.getReturnType());
-        } catch (EnvironmentException e) {
-            throw new NameResolutionException(declaringClass.getFileName(), methodDecl.getReturnType(),
-                    String.format("Cannot resolve symbol '%s'", methodDecl.getReturnType().toString()));
-        }
+        name = cd.getMethodName().getRaw();
 
-        List<VarDecl> args = methodDecl.getArguments();
+        List<VarDecl> args = cd.getArguments();
         parameterTypes = new Class[args.size()];
 
         for (int i = 0; i < args.size(); i++) {
@@ -41,8 +36,10 @@ public class Method {
                         String.format("Cannot resolve symbol '%s'", a.getType().toString()));
             }
         }
+    }
 
-        modifiers = methodDecl.getModifiers();
+    public Class getDeclaringClass() {
+        return declaringClass;
     }
 
     public int getModifiers() {
@@ -51,14 +48,6 @@ public class Method {
 
     public String getName() {
         return name;
-    }
-
-    public MethodDecl getMethodDecl() {
-        return methodDecl;
-    }
-
-    public Class getDeclaringClass() {
-        return declaringClass;
     }
 
     public String getHumanReadableSignature() {
@@ -79,27 +68,26 @@ public class Method {
         return sb.toString();
     }
 
-    public String getMethodSignature() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(getName());
-        for (Class type : parameterTypes) {
-            sb.append(',');
-            sb.append(type.getCanonicalName().replace('.', '$'));
-            if (type.isArray()) {
-                sb.append("[]");
+    public String getConstructorSignature() {
+        if (signature == null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(getName());
+            for (Class type : parameterTypes) {
+                sb.append(',');
+                sb.append(type.getCanonicalName().replace('.', '$'));
+                if (type.isArray()) {
+                    sb.append("[]");
+                }
             }
+            sb.append("@");
+            signature = sb.toString();
         }
-        sb.append("#");
-        return sb.toString();
+        return signature;
     }
 
-    public Class getReturnType() {
-        return returnType;
-    }
-
-    public static String getMethodSignature(String methodName, List<Class> argTypes) {
+    public static String getConstructorSignature(String constructorName, List<Class> argTypes) {
         StringBuilder sb = new StringBuilder();
-        sb.append(methodName);
+        sb.append(constructorName);
         for (Class type : argTypes) {
             sb.append(',');
             sb.append(type.getCanonicalName().replace('.', '$'));
@@ -107,7 +95,11 @@ public class Method {
                 sb.append("[]");
             }
         }
-        sb.append("#");
+        sb.append("@");
         return sb.toString();
+    }
+
+    public ConstructorDecl getConstructorDecl() {
+        return constructorDecl;
     }
 }

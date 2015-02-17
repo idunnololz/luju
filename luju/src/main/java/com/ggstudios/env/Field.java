@@ -3,15 +3,15 @@ package com.ggstudios.env;
 import com.ggstudios.types.VarDecl;
 
 public class Field {
-    protected Clazz declaringClass;
+    protected Class declaringClass;
     protected VarDecl varDecl;
 
-    protected Clazz type;
+    protected Class type;
     protected String name;
 
     protected Field() {}
 
-    public Field(Clazz declaringClass, VarDecl vDecl, Environment env) {
+    public Field(Class declaringClass, VarDecl vDecl, Environment env) {
         this.declaringClass = declaringClass;
         this.varDecl = vDecl;
 
@@ -19,7 +19,7 @@ public class Field {
         name = varDecl.getName();
     }
 
-    public Field(Clazz declaringClass, Clazz type, String name) {
+    public Field(Class declaringClass, Class type, String name) {
         this.declaringClass = declaringClass;
 
         this.type = type;
@@ -30,11 +30,11 @@ public class Field {
         return name;
     }
 
-    public Clazz getType() {
+    public Class getType() {
         return type;
     }
 
-    public Clazz getDeclaringClass() {
+    public Class getDeclaringClass() {
         return declaringClass;
     }
 

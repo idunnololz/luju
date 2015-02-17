@@ -25,8 +25,8 @@ public class Main {
                     //"-t",
                     //"-p",
                     "-A",
-                    "-d", TEST_DIR + "Test2",
-                    //TEST_DIR + "J1_access_override2.java",
+                    "-d", TEST_DIR + "Test0",
+                    //TEST_DIR + "Je_4_AbstractMethod_Declared.java",
                     "-d", STDLIB_DIR + "2.0/java"
                     //TEST_DIR + "Test.java"
             };

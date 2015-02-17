@@ -1,14 +1,9 @@
 package com.ggstudios.env;
 
-import com.ggstudios.error.EnvironmentException;
-import com.ggstudios.error.NameResolutionException;
-import com.ggstudios.types.ClassDecl;
 import com.ggstudios.types.InterfaceDecl;
 import com.ggstudios.types.TypeDecl;
 
-import java.util.List;
-
-public class Interface extends Clazz {
+public class Interface extends Class {
     private InterfaceDecl interfaceDecl;
 
     public Interface(TypeDecl classDecl, String fileName) {

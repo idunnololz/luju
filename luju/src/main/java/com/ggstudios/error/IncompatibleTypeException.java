@@ -1,10 +1,10 @@
 package com.ggstudios.error;
 
-import com.ggstudios.env.Clazz;
+import com.ggstudios.env.Class;
 import com.ggstudios.types.AstNode;
 
 public class IncompatibleTypeException extends TypeException {
-    public IncompatibleTypeException(String fileName, AstNode n, Clazz required, Clazz found) {
+    public IncompatibleTypeException(String fileName, AstNode n, Class required, Class found) {
         super(fileName, n, String.format("Incompatible types.\n" +
                 "\tRequired: %s\n" +
                 "\tFound: %s",

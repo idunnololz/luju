@@ -3,7 +3,6 @@ package com.ggstudios.luju;
 import com.ggstudios.error.AstException;
 import com.ggstudios.error.WeedException;
 import com.ggstudios.luju.Parser.Node;
-import com.ggstudios.types.AbstractMethodDecl;
 import com.ggstudios.types.ArrayAccessExpression;
 import com.ggstudios.types.ArrayCreationExpression;
 import com.ggstudios.types.AssignExpression;
@@ -106,7 +105,8 @@ public class AstGenerator {
             // abstractMethodDeclaration -> methodHeader SEMI
             List<Node> abstractMethodDeclarations = listFromTree(interfaceMemberDeclarations);
             for (Node n : ListUtils.reverse(abstractMethodDeclarations)) {
-                MethodDecl methodDecl = new AbstractMethodDecl();
+                MethodDecl methodDecl = new MethodDecl();
+                methodDecl.addModifier(Token.Type.ABSTRACT);
                 Token methodLandmark = getFirstTokensInTree(n);
                 methodDecl.setPos(methodLandmark.getRow(), methodLandmark.getCol());
                 doMethodHeader(methodDecl, n.children.get(0));
@@ -222,11 +222,7 @@ public class AstGenerator {
         MethodDecl methodDecl;
 
         boolean isBodiless = node.children.get(1).prod.rhs[0] == ParseTable.TERM_SEMI;
-        if (isBodiless) {
-            methodDecl = new AbstractMethodDecl();
-        } else {
-            methodDecl = new MethodDecl();
-        }
+        methodDecl = new MethodDecl();
 
         Token landmark = getFirstTokensInTree(node);
         methodDecl.setPos(landmark.getRow(), landmark.getCol());

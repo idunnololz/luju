@@ -109,6 +109,6 @@ public class MethodDecl extends AstNode {
     }
 
     public boolean isAbstract() {
-        return false;
+        return Modifier.isAbstract(modifiers);
     }
 }

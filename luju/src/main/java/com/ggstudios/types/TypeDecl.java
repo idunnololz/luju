@@ -1,5 +1,6 @@
 package com.ggstudios.types;
 
+import com.ggstudios.env.Modifier;
 import com.ggstudios.luju.Token;
 import com.ggstudios.utils.PrintUtils;
 
@@ -10,7 +11,7 @@ import java.util.Set;
 
 public class TypeDecl extends AstNode {
     private String packageName;
-    private Set<Token.Type> modifiers = new HashSet<>();
+    private int modifiers = 0;
     private List<MethodDecl> methDecls = new ArrayList<>();
     private String typeName;
 
@@ -28,12 +29,31 @@ public class TypeDecl extends AstNode {
         this.typeName = typeName;
     }
 
-    public Set<Token.Type> getModifiers() {
+    public int getModifiers() {
         return modifiers;
     }
 
-    public void addModifier(Token.Type modifier) {
-        this.modifiers.add(modifier);
+    public void addModifier(Token.Type mod) {
+        switch (mod) {
+            case PUBLIC:
+                modifiers |= Modifier.PUBLIC;
+                break;
+            case PROTECTED:
+                modifiers |= Modifier.PROTECTED;
+                break;
+            case STATIC:
+                modifiers |= Modifier.STATIC;
+                break;
+            case FINAL:
+                modifiers |= Modifier.FINAL;
+                break;
+            case NATIVE:
+                modifiers |= Modifier.NATIVE;
+                break;
+            case ABSTRACT:
+                modifiers |= Modifier.ABSTRACT;
+                break;
+        }
     }
 
     protected void toPrettyStringThis(StringBuilder sb, int level) {

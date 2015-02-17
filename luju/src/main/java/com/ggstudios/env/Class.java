@@ -10,33 +10,36 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public class Clazz extends HashMap<String, Object> {
+public class Class extends HashMap<String, Object> {
     private Set<String> methodSignatures = new HashSet<>();
 
+    private int modifiers;
     private TypeDecl classDecl;
     private String canonicalName;
     private String fileName;
-    protected Clazz superClass;
-    private Clazz arrayClass;
+    protected Class superClass;
+    private Class arrayClass;
 
-    private Clazz[] interfaces;
+    private Class[] interfaces;
 
     private Environment env;
 
     private boolean isComplete = false;
 
-    protected Clazz() {}
+    protected Class() {}
 
-    public Clazz(TypeDecl classDecl, String fileName) {
+    public Class(TypeDecl classDecl, String fileName) {
         this.fileName = fileName;
         this.classDecl = classDecl;
 
-        arrayClass = new ArrayClazz(this);
+        arrayClass = new ArrayClass(this);
 
         canonicalName = classDecl.getPackage() + "." + classDecl.getTypeName();
+
+        modifiers = classDecl.getModifiers();
     }
 
-    public Clazz getArrayClass() {
+    public Class getArrayClass() {
         return arrayClass;
     }
 
@@ -83,7 +86,15 @@ public class Clazz extends HashMap<String, Object> {
         }
     }
 
-    public Clazz getSuperClass() {
+    public void putConstructor(Constructor constructor) {
+        if (!methodSignatures.add(constructor.getConstructorSignature())) {
+            throw new NameResolutionException(getFileName(), constructor.getConstructorDecl(),
+                    String.format("'%s' is already defined in '%s'", constructor.getHumanReadableSignature(), getCanonicalName()));
+        }
+        put(constructor.getConstructorSignature(), constructor);
+    }
+
+    public Class getSuperClass() {
         return superClass;
     }
 
@@ -110,12 +121,12 @@ public class Clazz extends HashMap<String, Object> {
         return env;
     }
 
-    public Clazz[] getInterfaces() {
+    public Class[] getInterfaces() {
         return interfaces;
     }
 
     protected void setInterfaces(List<String> ints, Environment env) {
-        interfaces = new Clazz[ints.size()];
+        interfaces = new Class[ints.size()];
         Set<String> dupMap = new HashSet<>();
 
         for (int i = 0; i < ints.size(); i++) {
@@ -148,15 +159,15 @@ public class Clazz extends HashMap<String, Object> {
         isComplete = complete;
     }
 
-    public static boolean isValidAssign(Clazz lhs, Clazz rhs) {
+    public static boolean isValidAssign(Class lhs, Class rhs) {
         return (lhs == rhs || rhs == BaseEnvironment.TYPE_NULL || isSuperClassOf(lhs, rhs));
     }
 
-    private static final HashMap<Clazz, Integer> classToCategory = new HashMap<>();
+    private static final HashMap<Class, Integer> classToCategory = new HashMap<>();
     private static final int CATEGORY_NUMBER = 0x00000001;
     private static final int CATEGORY_BOOLEAN = 0x00000002;
 
-    public static boolean isValidCast(Clazz cast, Clazz original) {
+    public static boolean isValidCast(Class cast, Class original) {
         if (classToCategory.size() == 0) {
             classToCategory.put(BaseEnvironment.TYPE_BYTE, CATEGORY_NUMBER);
             classToCategory.put(BaseEnvironment.TYPE_CHAR, CATEGORY_NUMBER);
@@ -174,21 +185,21 @@ public class Clazz extends HashMap<String, Object> {
                 || isSuperClassOf(cast, original) || isSuperClassOf(original, cast));
     }
 
-    private static boolean isSuperClassOf(Clazz lhs, Clazz rhs) {
+    private static boolean isSuperClassOf(Class lhs, Class rhs) {
         if (lhs.isArray() && rhs.isArray()) {
             return isSuperClassOf(lhs.getSuperClass(), rhs.getSuperClass());
         } else if (lhs.isArray() != rhs.isArray()) {
             return false;
         }
 
-        Clazz superClass = rhs.getSuperClass();
-        Clazz[] interfaces = rhs.getInterfaces();
+        Class superClass = rhs.getSuperClass();
+        Class[] interfaces = rhs.getInterfaces();
         if (superClass == lhs) {
             return true;
         }
 
         if (interfaces != null) {
-            for (Clazz c : interfaces) {
+            for (Class c : interfaces) {
                 if (c == lhs) {
                     return true;
                 }
@@ -200,7 +211,7 @@ public class Clazz extends HashMap<String, Object> {
         }
 
         if (interfaces != null) {
-            for (Clazz c : interfaces) {
+            for (Class c : interfaces) {
                 if (isSuperClassOf(lhs, c)) {
                     return true;
                 }
@@ -213,5 +224,9 @@ public class Clazz extends HashMap<String, Object> {
     @Override
     public String toString() {
         return getCanonicalName();
+    }
+
+    public int getModifiers() {
+        return modifiers;
     }
 }

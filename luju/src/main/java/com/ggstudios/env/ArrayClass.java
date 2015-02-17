@@ -1,17 +1,16 @@
 package com.ggstudios.env;
 
-import com.ggstudios.types.AstNode;
 import com.ggstudios.types.TypeDecl;
 
-public class ArrayClazz extends Clazz {
-    private Clazz baseClass;
+public class ArrayClass extends Class {
+    private Class baseClass;
 
-    public ArrayClazz(Clazz c) {
+    public ArrayClass(Class c) {
         putField(new Field(c, BaseEnvironment.TYPE_INT, "length"));
         baseClass = c;
     }
 
-    public Clazz getSuperClass() {
+    public Class getSuperClass() {
         return baseClass;
     }
 
