@@ -72,11 +72,11 @@ public class ReferenceType extends Expression {
         return type;
     }
 
-    public Clazz getType() {
+    public Clazz getProper() {
         return clazz;
     }
 
-    public void setType(Clazz clazz) {
+    public void setProper(Clazz clazz) {
         this.clazz = clazz;
     }
 }

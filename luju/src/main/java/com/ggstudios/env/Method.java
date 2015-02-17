@@ -41,6 +41,12 @@ public class Method {
                         String.format("Cannot resolve symbol '%s'", a.getType().toString()));
             }
         }
+
+        modifiers = methodDecl.getModifiers();
+    }
+
+    public int getModifiers() {
+        return modifiers;
     }
 
     public String getName() {
@@ -76,18 +82,32 @@ public class Method {
     public String getMethodSignature() {
         StringBuilder sb = new StringBuilder();
         sb.append(getName());
-        sb.append('(');
-        if (parameterTypes.length != 0) {
-            for (Clazz type : parameterTypes) {
-                sb.append(type.getCanonicalName());
-                if (type.isArray()) {
-                    sb.append("[]");
-                }
-                sb.append(',');
+        for (Clazz type : parameterTypes) {
+            sb.append(',');
+            sb.append(type.getCanonicalName().replace('.', '$'));
+            if (type.isArray()) {
+                sb.append("[]");
             }
-            sb.setLength(sb.length() - 1);
         }
-        sb.append(')');
+        sb.append("#");
+        return sb.toString();
+    }
+
+    public Clazz getReturnType() {
+        return returnType;
+    }
+
+    public static String getMethodSignature(String methodName, List<Clazz> argTypes) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(methodName);
+        for (Clazz type : argTypes) {
+            sb.append(',');
+            sb.append(type.getCanonicalName().replace('.', '$'));
+            if (type.isArray()) {
+                sb.append("[]");
+            }
+        }
+        sb.append("#");
         return sb.toString();
     }
 }

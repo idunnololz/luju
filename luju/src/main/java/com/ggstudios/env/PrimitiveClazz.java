@@ -26,6 +26,9 @@ public class PrimitiveClazz extends Clazz {
     }
 
     @Override
+    public void resolveSelf(Environment env) {}
+
+    @Override
     public String getName() {
         return typeName;
     }

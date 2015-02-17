@@ -15,7 +15,21 @@ public abstract class Environment {
     }
 
     public Clazz lookupClazz(String[] name, boolean isArray) {
-        LookupResult r = lookupName(name);
+        CompositeEnvironment thisComp = null;
+        if (this instanceof LocalVariableEnvironment) {
+            thisComp = ((LocalVariableEnvironment) this).getClassScopeEnv();
+        } else if (this instanceof CompositeEnvironment) {
+            thisComp = (CompositeEnvironment) this;
+        }
+
+        LookupResult r;
+        if (thisComp != null) {
+            // TODO implement this better...
+            r = thisComp.lookupName(name, true);
+        } else {
+            r = lookupName(name);
+        }
+
         if (r == null || r.result == null || !(r.result instanceof Clazz) || r.tokensConsumed != name.length) {
             throw new EnvironmentException("Could not find class: " + nameListToName(name), EnvironmentException.ERROR_NOT_FOUND,
                     nameListToName(name));
@@ -37,9 +51,25 @@ public abstract class Environment {
     public Field lookupField(String[] name) {
         LookupResult r = lookupName(name);
         if (r == null || r.result == null || !(r.result instanceof Field) || r.tokensConsumed != name.length) {
-            throw new EnvironmentException("Could not find field: " + nameListToName(name), EnvironmentException.ERROR_NOT_FOUND);
+            String fullName = nameListToName(name);
+            throw new EnvironmentException("Could not find field: " + fullName, EnvironmentException.ERROR_NOT_FOUND,
+                    fullName);
         }
         return (Field) r.result;
+    }
+
+    public Method lookupMethod(String name) {
+        return lookupMethod(name.split("\\."));
+    }
+
+    public Method lookupMethod(String[] name) {
+        LookupResult r = lookupName(name);
+        if (r == null || r.result == null || !(r.result instanceof Method) || r.tokensConsumed != name.length) {
+            String fullName = nameListToName(name);
+            throw new EnvironmentException("Could not find method: " + fullName, EnvironmentException.ERROR_NOT_FOUND,
+                    fullName);
+        }
+        return (Method) r.result;
     }
 
     public static String nameListToName(String[] name) {

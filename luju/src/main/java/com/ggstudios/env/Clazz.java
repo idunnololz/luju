@@ -11,15 +11,12 @@ import java.util.List;
 import java.util.Set;
 
 public class Clazz extends HashMap<String, Object> {
-
-    public static final String METHOD_PREFIX = "#";
-
     private Set<String> methodSignatures = new HashSet<>();
 
     private TypeDecl classDecl;
     private String canonicalName;
     private String fileName;
-    private Clazz superClass;
+    protected Clazz superClass;
     private Clazz arrayClass;
 
     private Clazz[] interfaces;
@@ -39,7 +36,7 @@ public class Clazz extends HashMap<String, Object> {
         canonicalName = classDecl.getPackage() + "." + classDecl.getTypeName();
     }
 
-    protected Clazz getArrayClass() {
+    public Clazz getArrayClass() {
         return arrayClass;
     }
 
@@ -76,7 +73,7 @@ public class Clazz extends HashMap<String, Object> {
             throw new NameResolutionException(getFileName(), method.getMethodDecl(),
                     String.format("'%s' is already defined in '%s'", method.getHumanReadableSignature(), getCanonicalName()));
         }
-        put(METHOD_PREFIX + method.getName(), method);
+        put(method.getMethodSignature(), method);
     }
 
     public void putField(Field field) {
@@ -101,6 +98,8 @@ public class Clazz extends HashMap<String, Object> {
                     throw new NameResolutionException(getFileName(), clazz,
                             String.format("Cannot resolve symbol '%s'", clazz.getSuperTypeName()));
                 }
+            } else if (this != BaseEnvironment.TYPE_OBJECT) {
+                superClass = env.lookupClazz("Object", false);
             }
 
             setInterfaces(clazz.getImplementsList(), env);
@@ -147,5 +146,72 @@ public class Clazz extends HashMap<String, Object> {
 
     public void setIsComplete(boolean complete) {
         isComplete = complete;
+    }
+
+    public static boolean isValidAssign(Clazz lhs, Clazz rhs) {
+        return (lhs == rhs || rhs == BaseEnvironment.TYPE_NULL || isSuperClassOf(lhs, rhs));
+    }
+
+    private static final HashMap<Clazz, Integer> classToCategory = new HashMap<>();
+    private static final int CATEGORY_NUMBER = 0x00000001;
+    private static final int CATEGORY_BOOLEAN = 0x00000002;
+
+    public static boolean isValidCast(Clazz cast, Clazz original) {
+        if (classToCategory.size() == 0) {
+            classToCategory.put(BaseEnvironment.TYPE_BYTE, CATEGORY_NUMBER);
+            classToCategory.put(BaseEnvironment.TYPE_CHAR, CATEGORY_NUMBER);
+            classToCategory.put(BaseEnvironment.TYPE_INT, CATEGORY_NUMBER);
+            classToCategory.put(BaseEnvironment.TYPE_SHORT, CATEGORY_NUMBER);
+            classToCategory.put(BaseEnvironment.TYPE_BOOLEAN, CATEGORY_BOOLEAN);
+        }
+
+        Integer res = classToCategory.get(cast);
+        if (res != null) {
+            return res == classToCategory.get(original);
+        }
+
+        return (original == BaseEnvironment.TYPE_NULL || cast == original
+                || isSuperClassOf(cast, original) || isSuperClassOf(original, cast));
+    }
+
+    private static boolean isSuperClassOf(Clazz lhs, Clazz rhs) {
+        if (lhs.isArray() && rhs.isArray()) {
+            return isSuperClassOf(lhs.getSuperClass(), rhs.getSuperClass());
+        } else if (lhs.isArray() != rhs.isArray()) {
+            return false;
+        }
+
+        Clazz superClass = rhs.getSuperClass();
+        Clazz[] interfaces = rhs.getInterfaces();
+        if (superClass == lhs) {
+            return true;
+        }
+
+        if (interfaces != null) {
+            for (Clazz c : interfaces) {
+                if (c == lhs) {
+                    return true;
+                }
+            }
+        }
+
+        if (superClass != null && isSuperClassOf(lhs, superClass)) {
+            return true;
+        }
+
+        if (interfaces != null) {
+            for (Clazz c : interfaces) {
+                if (isSuperClassOf(lhs, c)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    public String toString() {
+        return getCanonicalName();
     }
 }

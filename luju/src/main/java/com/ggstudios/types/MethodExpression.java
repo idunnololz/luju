@@ -18,7 +18,7 @@ public class MethodExpression extends Expression {
         this.argList = argList;
     }
 
-    public Expression getMethodIdExpr() {
+    public VariableExpression getMethodIdExpr() {
         return methodIdExpr;
     }
 

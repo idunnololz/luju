@@ -13,6 +13,14 @@ public class FieldVariable extends VariableExpression {
         setPos(prefixExpr);
     }
 
+    public Expression getPrefixExpr() {
+        return prefixExpr;
+    }
+
+    public String getFieldName() {
+        return id.getRaw();
+    }
+
     @Override
     public String getName() {
         StringBuilder sb = new StringBuilder();

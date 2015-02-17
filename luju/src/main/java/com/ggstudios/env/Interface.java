@@ -27,5 +27,6 @@ public class Interface extends Clazz {
         super.resolveSelf(env);
 
         setInterfaces(interfaceDecl.getExtendsList(), env);
+        superClass = env.lookupClazz("Object", false);
     }
 }

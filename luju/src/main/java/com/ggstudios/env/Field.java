@@ -19,11 +19,11 @@ public class Field {
         name = varDecl.getName();
     }
 
-    public Field(Clazz declaringClass, Clazz type, Environment env) {
+    public Field(Clazz declaringClass, Clazz type, String name) {
         this.declaringClass = declaringClass;
 
-        type = type;
-        name = varDecl.getName();
+        this.type = type;
+        this.name = name;
     }
 
     public String getName() {

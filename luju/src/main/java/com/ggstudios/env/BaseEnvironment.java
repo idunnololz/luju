@@ -29,6 +29,16 @@ public class BaseEnvironment extends Environment {
         "int", "boolean", "short", "char", "void", "byte"
     };
 
+    public static final Clazz TYPE_INT = new PrimitiveClazz("int");
+    public static final Clazz TYPE_BOOLEAN = new PrimitiveClazz("boolean");
+    public static final Clazz TYPE_SHORT = new PrimitiveClazz("short");
+    public static final Clazz TYPE_CHAR = new PrimitiveClazz("char");
+    public static final Clazz TYPE_VOID = new PrimitiveClazz("void");
+    public static final Clazz TYPE_BYTE = new PrimitiveClazz("byte");
+    public static final Clazz TYPE_NULL = new PrimitiveClazz("null");
+    public static Clazz TYPE_OBJECT;
+    public static Clazz TYPE_STRING;
+
     public BaseEnvironment(Ast ast) {
         int len = ast.size();
 
@@ -47,9 +57,16 @@ public class BaseEnvironment extends Environment {
             addEntry(cm.getPackage(), cm);
         }
 
-        for (String s : PRIMITIVE_TYPES) {
-            baseMap.put(s, new PrimitiveClazz(s));
-        }
+        TYPE_OBJECT = lookupClazz("java.lang.Object", false);
+        TYPE_STRING = lookupClazz("java.lang.String", false);
+
+        baseMap.put("int", TYPE_INT);
+        baseMap.put("boolean", TYPE_BOOLEAN);
+        baseMap.put("short", TYPE_SHORT);
+        baseMap.put("char", TYPE_CHAR);
+        baseMap.put("byte", TYPE_BYTE);
+        baseMap.put("void", TYPE_VOID);
+        baseMap.put("null", TYPE_NULL);
     }
 
     public List<Clazz> getAllClasses() {

@@ -1,11 +1,13 @@
 package com.ggstudios.env;
 
+import com.ggstudios.types.AstNode;
 import com.ggstudios.types.TypeDecl;
 
 public class ArrayClazz extends Clazz {
     private Clazz baseClass;
 
     public ArrayClazz(Clazz c) {
+        putField(new Field(c, BaseEnvironment.TYPE_INT, "length"));
         baseClass = c;
     }
 

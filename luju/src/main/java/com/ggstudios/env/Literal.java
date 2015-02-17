@@ -14,12 +14,27 @@ public class Literal extends Field {
                 break;
             case CHARLIT:
                 value = t.getRaw().charAt(0);
-                type = env.lookupClazz("char", false);
+                type = BaseEnvironment.TYPE_CHAR;
                 break;
             case INTLIT:
                 value = (int)t.getVal();
-                type = env.lookupClazz("int", false);
+                type = BaseEnvironment.TYPE_INT;
                 break;
+            case FALSE:
+                value = false;
+                type = BaseEnvironment.TYPE_BOOLEAN;
+                break;
+            case TRUE:
+                value = true;
+                type = BaseEnvironment.TYPE_BOOLEAN;
+                break;
+            case NULL:
+                value = null;
+                type = BaseEnvironment.TYPE_NULL;
+                break;
+            default:
+                throw new RuntimeException(String.format("Literal type '%s' is not supported",
+                        t.getType()));
         }
     }
 

@@ -1,5 +1,8 @@
 package com.ggstudios.luju;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class Token {
     private int row, col;
     private String raw;

@@ -26,7 +26,7 @@ public class Main {
                     //"-p",
                     "-A",
                     "-d", TEST_DIR + "Test2",
-                    //TEST_DIR + "Je_4_DuplicateMethodDeclare_ArrayArgs.java",
+                    //TEST_DIR + "J1_access_override2.java",
                     "-d", STDLIB_DIR + "2.0/java"
                     //TEST_DIR + "Test.java"
             };
