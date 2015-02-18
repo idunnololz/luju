@@ -16,9 +16,14 @@ public class MapEnvironment extends Environment {
     public LookupResult lookupName(String[] name) {
         if (name.length == 0) return null;
 
+        boolean typeFound = false;
         Object o = map.get(name[0]);
         int i = 1;
         while (i != name.length) {
+            if (o instanceof Class) {
+                typeFound = true;
+            }
+
             if (o instanceof Map) {
                 o = ((Map) o).get(name[i++]);
             } else if (o instanceof Field) {
@@ -27,6 +32,12 @@ public class MapEnvironment extends Environment {
                 break;
             }
         }
-        return o == null ? null : new LookupResult(o, i);
+        if (o == null) {
+            if (typeFound) {
+                return new LookupResult(o, i - 1);
+            }
+            return null;
+        }
+        return new LookupResult(o, i);
     }
 }
