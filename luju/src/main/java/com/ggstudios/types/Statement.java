@@ -5,7 +5,6 @@ public abstract class Statement extends AstNode {
     public static final int TYPE_EXPRESSION     = 2;
     public static final int TYPE_FOR            = 3;
     public static final int TYPE_IF             = 4;
-    public static final int TYPE_ELSE_BLOCK     = 5;
     public static final int TYPE_IF_BLOCK       = 6;
     public static final int TYPE_RETURN         = 7;
     public static final int TYPE_VARDECL        = 8;
