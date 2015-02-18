@@ -24,4 +24,8 @@ public class ReturnStatement extends Statement {
     public void setExpression(Expression expr) {
         optExpr = expr;
     }
+
+    public Expression getExpression() {
+        return optExpr;
+    }
 }
