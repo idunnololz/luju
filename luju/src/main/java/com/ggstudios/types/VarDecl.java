@@ -1,5 +1,6 @@
 package com.ggstudios.types;
 
+import com.ggstudios.env.Field;
 import com.ggstudios.luju.Token;
 import com.ggstudios.utils.PrintUtils;
 
@@ -12,6 +13,7 @@ public class VarDecl extends Statement {
     private ReferenceType type;
 
     private Token id;
+    private Field proper;
 
     public VarDecl() {
         super(Statement.TYPE_VARDECL);
@@ -54,5 +56,13 @@ public class VarDecl extends Statement {
 
     public String getName() {
         return id.getRaw();
+    }
+
+    public void setProper(Field proper) {
+        this.proper = proper;
+    }
+
+    public Field getProper() {
+        return proper;
     }
 }
