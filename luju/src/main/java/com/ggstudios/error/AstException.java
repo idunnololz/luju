@@ -17,6 +17,12 @@ public class AstException extends RuntimeException {
         this.fileName = fileName;
     }
 
+    public AstException(String fileName, AstNode n, String message, Throwable cause) {
+        super(message, cause);
+        node = n;
+        this.fileName = fileName;
+    }
+
     public AstNode getNode() {
         return node;
     }

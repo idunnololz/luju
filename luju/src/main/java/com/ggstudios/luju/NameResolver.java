@@ -669,17 +669,17 @@ public class NameResolver {
         switch (e.getType()) {
             case EnvironmentException.ERROR_NOT_FOUND:
                 throw new NameResolutionException(fileName, pos,
-                        String.format("Cannot resolve symbol '%s'", e.getExtra().toString()));
+                        String.format("Cannot resolve symbol '%s'", e.getExtra().toString()), e);
             case EnvironmentException.ERROR_CLASS_NAME_CLASH:
                 ErrorClass ec = (ErrorClass) e.getExtra();
                 throw new NameResolutionException(fileName, pos,
                         String.format("Reference to '%s' is ambiguous, both '%s' and '%s' match",
                                 ec.nameClash[0].getName(), ec.nameClash[0].getCanonicalName(),
-                                ec.nameClash[1].getCanonicalName()));
+                                ec.nameClash[1].getCanonicalName()), e);
             case EnvironmentException.ERROR_SAME_VARIABLE_IN_SCOPE:
                 throw new NameResolutionException(fileName, pos,
                         String.format("Variable '%s' is already defined in the scope",
-                                e.getExtra().toString()));
+                                e.getExtra().toString()), e);
         }
     }
 }
