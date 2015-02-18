@@ -39,6 +39,8 @@ public class BaseEnvironment extends Environment {
     public static Class TYPE_OBJECT;
     public static Class TYPE_OBJECT_BOOLEAN;
     public static Class TYPE_STRING;
+    public static Class TYPE_SERIALIZABLE;
+    public static Class TYPE_CLONEABLE;
 
     static {
         ((PrimitiveClass)TYPE_INT).forceReinitializeArrayClass();
@@ -65,6 +67,10 @@ public class BaseEnvironment extends Environment {
         TYPE_OBJECT = lookupClazz("java.lang.Object", false);
         TYPE_STRING = lookupClazz("java.lang.String", false);
         TYPE_OBJECT_BOOLEAN = lookupClazz("java.lang.Boolean", false);
+
+        TYPE_CLONEABLE = lookupClazz("java.lang.Cloneable", false);
+        TYPE_SERIALIZABLE = lookupClazz("java.io.Serializable", false);
+
 
         baseMap.put("int", TYPE_INT);
         baseMap.put("boolean", TYPE_BOOLEAN);

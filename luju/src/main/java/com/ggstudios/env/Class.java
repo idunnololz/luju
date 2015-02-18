@@ -5,6 +5,7 @@ import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.types.ClassDecl;
 import com.ggstudios.types.TypeDecl;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -37,6 +38,8 @@ public class Class extends HashMap<String, Object> {
         canonicalName = classDecl.getPackage() + "." + classDecl.getTypeName();
 
         modifiers = classDecl.getModifiers();
+
+        arrayClass.resolveSelf(arrayClass.getEnvironment());
     }
 
     public Class getArrayClass() {
@@ -193,11 +196,18 @@ public class Class extends HashMap<String, Object> {
     }
 
     private static boolean isSuperClassOf(Class lhs, Class rhs) {
+        if (lhs == BaseEnvironment.TYPE_SERIALIZABLE || lhs == BaseEnvironment.TYPE_CLONEABLE) {
+            return true;
+        }
         if (lhs.isArray() && rhs.isArray()) {
             return isSuperClassOf(lhs.getSuperClass(), rhs.getSuperClass());
-        } else if (lhs.isArray() != rhs.isArray()) {
-            return false;
         }
+        if (rhs.isArray() && lhs == BaseEnvironment.TYPE_OBJECT) {
+            return true;
+        }
+//        else if (lhs.isArray() != rhs.isArray()) {
+//            return false;
+//        }
 
         Class superClass = rhs.getSuperClass();
         Class[] interfaces = rhs.getInterfaces();

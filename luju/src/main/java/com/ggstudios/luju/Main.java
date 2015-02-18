@@ -26,7 +26,7 @@ public class Main {
                     //"-p",
                     "-A",
                     //"-d", TEST_DIR + "Test1",
-                    TEST_DIR + "Je_6_For_NullInCondition.java",
+                    TEST_DIR + "A.java",
                     "-d", STDLIB_DIR + "2.0/java"
                     //TEST_DIR + "Test.java"
             };
