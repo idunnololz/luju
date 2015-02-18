@@ -33,6 +33,10 @@ public class IfStatement extends Statement {
         elseBlock = b;
     }
 
+    public ElseBlock getElseBlock() {
+        return elseBlock;
+    }
+
     @Override
     public void toPrettyString(StringBuilder sb, int level) {
         PrintUtils.level(sb, level);
@@ -53,7 +57,7 @@ public class IfStatement extends Statement {
             PrintUtils.level(sb, level + 1);
             sb.append("else ");
             sb.append('\n');
-            elseBlock.elseStatement.toPrettyString(sb, level + 2);
+            elseBlock.toPrettyString(sb, level + 2);
         }
 
         sb.append('\n');
@@ -70,14 +74,21 @@ public class IfStatement extends Statement {
             this.condition = condition;
             this.body = body;
         }
+
+        public Expression getCondition() {
+            return condition;
+        }
+
+        public Statement getBody() {
+            return body;
+        }
     }
 
-    public static class ElseBlock extends Statement {
-        private Statement elseStatement;
-
+    public static class ElseBlock extends Block {
         public ElseBlock(Statement elseStatement) {
-            super(Statement.TYPE_ELSE_BLOCK);
-            this.elseStatement = elseStatement;
+            super();
+            setPos(elseStatement);
+            addStatement(elseStatement);
         }
     }
 }
