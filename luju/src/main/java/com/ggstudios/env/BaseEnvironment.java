@@ -37,6 +37,7 @@ public class BaseEnvironment extends Environment {
     public static final Class TYPE_BYTE = new PrimitiveClass("byte");
     public static final Class TYPE_NULL = new PrimitiveClass("null");
     public static Class TYPE_OBJECT;
+    public static Class TYPE_OBJECT_BOOLEAN;
     public static Class TYPE_STRING;
 
     public BaseEnvironment(Ast ast) {
@@ -59,6 +60,7 @@ public class BaseEnvironment extends Environment {
 
         TYPE_OBJECT = lookupClazz("java.lang.Object", false);
         TYPE_STRING = lookupClazz("java.lang.String", false);
+        TYPE_OBJECT_BOOLEAN = lookupClazz("java.lang.Boolean", false);
 
         baseMap.put("int", TYPE_INT);
         baseMap.put("boolean", TYPE_BOOLEAN);
@@ -121,12 +123,13 @@ public class BaseEnvironment extends Environment {
             if (m.containsKey(s)) {
                 Object o = m.get(s);
                 if (o instanceof Class) {
-                    throw new EnvironmentException("Given package name refers to a class. Given: " + packageName,
+                    throw new EnvironmentException(String.format("Package import refers to a class '%s'", packageName),
                             EnvironmentException.ERROR_PACKAGE_IS_CLASS);
                 }
                 m = (Map<String, Object>) m.get(s);
             } else {
-                return classes;
+                throw new EnvironmentException(String.format("Package '%s' doesn't exist", packageName),
+                        EnvironmentException.ERROR_PACKAGE_IS_CLASS);
             }
         }
 
