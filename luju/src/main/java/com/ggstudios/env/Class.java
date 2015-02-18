@@ -164,10 +164,10 @@ public class Class extends HashMap<String, Object> {
     }
 
     private static final HashMap<Class, Integer> classToCategory = new HashMap<>();
-    private static final int CATEGORY_NUMBER = 0x00000001;
+    public static final int CATEGORY_NUMBER = 0x00000001;
     private static final int CATEGORY_BOOLEAN = 0x00000002;
 
-    public static boolean isValidCast(Class cast, Class original) {
+    public static int getCategory(Class c) {
         if (classToCategory.size() == 0) {
             classToCategory.put(BaseEnvironment.TYPE_BYTE, CATEGORY_NUMBER);
             classToCategory.put(BaseEnvironment.TYPE_CHAR, CATEGORY_NUMBER);
@@ -175,10 +175,13 @@ public class Class extends HashMap<String, Object> {
             classToCategory.put(BaseEnvironment.TYPE_SHORT, CATEGORY_NUMBER);
             classToCategory.put(BaseEnvironment.TYPE_BOOLEAN, CATEGORY_BOOLEAN);
         }
+        return classToCategory.getOrDefault(c, 0);
+    }
 
-        Integer res = classToCategory.get(cast);
-        if (res != null) {
-            return res == classToCategory.get(original);
+    public static boolean isValidCast(Class cast, Class original) {
+        int res = getCategory(cast);
+        if (res != 0) {
+            return res == getCategory(original);
         }
 
         return (original == BaseEnvironment.TYPE_NULL || cast == original
@@ -224,6 +227,11 @@ public class Class extends HashMap<String, Object> {
     @Override
     public String toString() {
         return getCanonicalName();
+    }
+
+    @Override
+    public int hashCode() {
+        return toString().hashCode();
     }
 
     public int getModifiers() {
