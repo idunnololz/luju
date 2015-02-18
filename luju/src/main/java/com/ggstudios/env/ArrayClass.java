@@ -4,10 +4,13 @@ import com.ggstudios.types.TypeDecl;
 
 public class ArrayClass extends Class {
     private Class baseClass;
+    private Environment env;
 
     public ArrayClass(Class c) {
         putField(new Field(c, BaseEnvironment.TYPE_INT, "length"));
         baseClass = c;
+
+        env = new ClassEnvironment(this);
     }
 
     public Class getSuperClass() {
@@ -57,5 +60,10 @@ public class ArrayClass extends Class {
     public void putMethod(Method method) {
         throw new IllegalStateException(String.format("Cannot add methods to array type '%s'.",
                 getCanonicalName()));
+    }
+
+    @Override
+    public Environment getEnvironment() {
+        return env;
     }
 }

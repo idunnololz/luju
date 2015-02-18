@@ -231,13 +231,19 @@ public class NameResolver {
             case Statement.TYPE_FOR: {
                 ForStatement forStatement = (ForStatement) s;
                 Environment oldEnv = env;
-                env = resolveStatement(forStatement.getForInit(), env);
-                Class type = resolveExpression(forStatement.getCondition(), env);
-                if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
-                    throw new IncompatibleTypeException(curClass.getFileName(),
-                            forStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
+                if (forStatement.getForInit() != null) {
+                    env = resolveStatement(forStatement.getForInit(), env);
                 }
-                resolveStatement(forStatement.getForUpdate(), env);
+                if (forStatement.getCondition() != null) {
+                    Class type = resolveExpression(forStatement.getCondition(), env);
+                    if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
+                        throw new IncompatibleTypeException(curClass.getFileName(),
+                                forStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
+                    }
+                }
+                if (forStatement.getForUpdate() != null) {
+                    resolveStatement(forStatement.getForUpdate(), env);
+                }
                 resolveStatement(forStatement.getBody(), env);
                 env = oldEnv;
                 break;
@@ -599,8 +605,7 @@ public class NameResolver {
 
         if (classes.size() != 0) {
             Environment env = classes.get(0).getEnvironment();
-            Class objClass = env.lookupClazz("java.lang.Object", false);
-            objClass.setIsComplete(true);
+            BaseEnvironment.TYPE_OBJECT.setIsComplete(true);
         }
 
         while (!toResolve.isEmpty()) {
@@ -633,10 +638,21 @@ public class NameResolver {
             if (!dependenciesComplete) continue;
 
             if (superClass != null) {
+                if (Modifier.isFinal(superClass.getModifiers())) {
+                    throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
+                            String.format("Cannot inherit from final '%s'", superClass.getCanonicalName()));
+                } else if (superClass.isInterface()) {
+                    throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
+                            "Cannot inherit from interface");
+                }
                 mergeMethodWithClass(c, superClass);
             }
 
             for (Class i : interfaces) {
+                if (!i.isInterface()) {
+                    throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
+                            "Cannot extend class");
+                }
                 mergeMethodWithClass(c, i);
             }
 
@@ -655,6 +671,11 @@ public class NameResolver {
                     Method oldMeth = (Method) val;
                     Method newMeth = (Method) c.get(entry.getKey());
 
+                    if (oldMeth == newMeth) continue;
+
+                    int oMods = oldMeth.getModifiers();
+                    int nMods = newMeth.getModifiers();
+
                     if (oldMeth.getReturnType() != newMeth.getReturnType()) {
                         throw new NameResolutionException(c.getFileName(), newMeth.getMethodDecl(),
                                 String.format("'%s' in '%s' clashes with '%s' in '%s'; attempting to use incompatible return type",
@@ -665,6 +686,26 @@ public class NameResolver {
                                 String.format("'%s' in '%s' clashes with '%s' in '%s'; attempting to assign weaker access privileges",
                                         newMeth.getHumanReadableSignature(), newMeth.getDeclaringClass().getCanonicalName(),
                                         oldMeth.getHumanReadableSignature(), oldMeth.getDeclaringClass().getCanonicalName()));
+                    } else if (Modifier.isFinal(oldMeth.getModifiers())) {
+                        throw new NameResolutionException(c.getFileName(), newMeth.getMethodDecl(),
+                                String.format("'%s' cannot override '%s' in '%s'; overriden method is final",
+                                        newMeth.getHumanReadableSignature(),
+                                        oldMeth.getHumanReadableSignature(),
+                                        oldMeth.getDeclaringClass().getCanonicalName()));
+                    } else if (Modifier.isStatic(nMods) && !Modifier.isStatic(oMods)) {
+                        throw new NameResolutionException(c.getFileName(), newMeth.getMethodDecl(),
+                                String.format("Static method '%s' in '%s' cannot override instance method '%s' in '%s'",
+                                        newMeth.getHumanReadableSignature(),
+                                        newMeth.getDeclaringClass().getCanonicalName(),
+                                        oldMeth.getHumanReadableSignature(),
+                                        oldMeth.getDeclaringClass().getCanonicalName()));
+                    } else if (Modifier.isStatic(oMods) && !Modifier.isStatic(nMods)) {
+                        throw new NameResolutionException(c.getFileName(), newMeth.getMethodDecl(),
+                                String.format("Instance method '%s' in '%s' cannot override static method '%s' in '%s'",
+                                        newMeth.getHumanReadableSignature(),
+                                        newMeth.getDeclaringClass().getCanonicalName(),
+                                        oldMeth.getHumanReadableSignature(),
+                                        oldMeth.getDeclaringClass().getCanonicalName()));
                     }
                 }
             } else {

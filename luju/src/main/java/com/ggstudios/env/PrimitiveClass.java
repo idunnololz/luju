@@ -9,6 +9,15 @@ public class PrimitiveClass extends Class {
     public PrimitiveClass(String typeName) {
         this.typeName = typeName;
         arrayClass = new ArrayClass(this);
+
+        setEnvironment(new ClassEnvironment(this));
+    }
+
+    /**
+     * This is for the very special case of the primitive class int as it is a circular reference...
+     */
+    void forceReinitializeArrayClass() {
+        arrayClass = new ArrayClass(this);
     }
 
     @Override
@@ -21,9 +30,6 @@ public class PrimitiveClass extends Class {
         throw new IllegalStateException(String.format("Primitive type '%s' does not have a class declaration.",
                 getName()));
     }
-
-    @Override
-    public void resolveSelf(Environment env) {}
 
     @Override
     public String getName() {

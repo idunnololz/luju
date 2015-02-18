@@ -117,6 +117,10 @@ public class Class extends HashMap<String, Object> {
         }
     }
 
+    protected void setEnvironment(ClassEnvironment environment) {
+        env = environment;
+    }
+
     public Environment getEnvironment() {
         return env;
     }

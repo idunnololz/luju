@@ -40,6 +40,10 @@ public class BaseEnvironment extends Environment {
     public static Class TYPE_OBJECT_BOOLEAN;
     public static Class TYPE_STRING;
 
+    static {
+        ((PrimitiveClass)TYPE_INT).forceReinitializeArrayClass();
+    }
+
     public BaseEnvironment(Ast ast) {
         int len = ast.size();
 
