@@ -19,18 +19,22 @@ import com.ggstudios.types.ConstructorDecl;
 import com.ggstudios.types.Expression;
 import com.ggstudios.types.ExpressionStatement;
 import com.ggstudios.types.FieldVariable;
+import com.ggstudios.types.ForStatement;
 import com.ggstudios.types.ICreationExpression;
+import com.ggstudios.types.IfStatement;
 import com.ggstudios.types.LiteralExpression;
 import com.ggstudios.types.MethodDecl;
 import com.ggstudios.types.MethodExpression;
 import com.ggstudios.types.NameVariable;
 import com.ggstudios.types.ReferenceType;
+import com.ggstudios.types.ReturnStatement;
 import com.ggstudios.types.Statement;
 import com.ggstudios.types.TypeDecl;
 import com.ggstudios.types.UnaryExpression;
 import com.ggstudios.types.VarDecl;
 import com.ggstudios.types.VarInitDecl;
 import com.ggstudios.types.VariableExpression;
+import com.ggstudios.types.WhileStatement;
 import com.ggstudios.utils.ClassUtils;
 
 import java.util.ArrayList;
@@ -145,8 +149,11 @@ public class NameResolver {
                         if (vd instanceof VarInitDecl) {
                             VarInitDecl vid = (VarInitDecl) vd;
                             Expression expr = vid.getExpr();
-                            resolveExpression(expr, env);
-                            // TODO check that the expression type matches...
+                            Class expressonType = resolveExpression(expr, env);
+                            if (!Class.isValidAssign(vid.getProper().getType(), expressonType)) {
+                                throw new IncompatibleTypeException(curClass.getFileName(), vd,
+                                        vid.getProper().getType(), expressonType);
+                            }
                         }
                     } catch (EnvironmentException e) {
                         throwNameResolutionException(e, c.getFileName(), vd);
@@ -205,6 +212,7 @@ public class NameResolver {
     }
 
     private Environment resolveStatement(Statement s, Environment env) {
+        // TODO
         switch (s.getStatementType()) {
             case Statement.TYPE_BLOCK: {
                 Block b = (Block) s;
@@ -220,13 +228,49 @@ public class NameResolver {
                 resolveExpression(expr.getExpr(), env);
                 break;
             }
-            case Statement.TYPE_FOR:
-            case Statement.TYPE_IF:
-            case Statement.TYPE_ELSE_BLOCK:
-            case Statement.TYPE_IF_BLOCK:
-            case Statement.TYPE_RETURN:
+            case Statement.TYPE_FOR: {
+                ForStatement forStatement = (ForStatement) s;
+                Environment oldEnv = env;
+                env = resolveStatement(forStatement.getForInit(), env);
+                Class type = resolveExpression(forStatement.getCondition(), env);
+                if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
+                    throw new IncompatibleTypeException(curClass.getFileName(),
+                            forStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
+                }
+                resolveStatement(forStatement.getForUpdate(), env);
+                resolveStatement(forStatement.getBody(), env);
+                env = oldEnv;
                 break;
-            case Statement.TYPE_VARDECL:
+            }
+            case Statement.TYPE_IF: {
+                IfStatement ifStatement = (IfStatement) s;
+                for (IfStatement.IfBlock b : ifStatement.getIfBlocks()) {
+                    resolveStatement(b, env);
+                }
+                if (ifStatement.getElseBlock() != null) {
+                    resolveStatement(ifStatement.getElseBlock(), env);
+                }
+                break;
+            }
+            case Statement.TYPE_IF_BLOCK: {
+                IfStatement.IfBlock ifBlock = (IfStatement.IfBlock) s;
+                Class type = resolveExpression(ifBlock.getCondition(), env);
+                if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
+                    throw new IncompatibleTypeException(curClass.getFileName(),
+                            ifBlock.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
+                }
+                resolveStatement(ifBlock.getBody(), env);
+                break;
+            }
+            case Statement.TYPE_RETURN: {
+                ReturnStatement returnStatement = (ReturnStatement) s;
+                Expression e = returnStatement.getExpression();
+                if (e != null) {
+                    resolveExpression(e, env);
+                }
+                break;
+            }
+            case Statement.TYPE_VARDECL: {
                 VarDecl vd = (VarDecl) s;
                 Variable var = new Variable(null, vd, env);
                 if (vd instanceof VarInitDecl) {
@@ -234,14 +278,23 @@ public class NameResolver {
                     Class type = resolveExpression(vid.getExpr(), env);
                     if (!Class.isValidAssign(var.getType(), type)) {
                         throw new IncompatibleTypeException(curClass.getFileName(), vd,
-                                        var.getType(), type);
+                                var.getType(), type);
                     }
                 }
 
                 env = new LocalVariableEnvironment(var.getName(), var, env);
                 break;
-            case Statement.TYPE_WHILE:
+            }
+            case Statement.TYPE_WHILE: {
+                WhileStatement whileStatement = (WhileStatement) s;
+                Class type = resolveExpression(whileStatement.getCondition(), env);
+                if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
+                    throw new IncompatibleTypeException(curClass.getFileName(),
+                            whileStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
+                }
+                resolveStatement(whileStatement.getBody(), env);
                 break;
+            }
         }
         return env;
     }
@@ -290,7 +343,7 @@ public class NameResolver {
                     case LT_EQ:
                     case GT:
                     case GT_EQ:
-                        if (l != BaseEnvironment.TYPE_INT || r != BaseEnvironment.TYPE_INT) {
+                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
                             throw new TypeException(curClass.getFileName(), ex,
                                     String.format("Operator '%s' cannot be applied to '%s', '%s'",
                                             binEx.getOp().getType(),
@@ -316,7 +369,7 @@ public class NameResolver {
                     case PLUS:
                         if (l == BaseEnvironment.TYPE_STRING || r == BaseEnvironment.TYPE_STRING)
                             return BaseEnvironment.TYPE_STRING;
-                        if (l != BaseEnvironment.TYPE_INT || r != BaseEnvironment.TYPE_INT) {
+                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
                             throw new TypeException(curClass.getFileName(), ex,
                                     String.format("Operator '%s' cannot be applied to '%s', '%s'",
                                             binEx.getOp().getType(),
@@ -326,8 +379,9 @@ public class NameResolver {
                         return BaseEnvironment.TYPE_INT;
                     case MINUS:
                     case STAR:
+                    case MOD:
                     case FSLASH:
-                        if (l != BaseEnvironment.TYPE_INT || r != BaseEnvironment.TYPE_INT) {
+                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
                             throw new TypeException(curClass.getFileName(), ex,
                                     String.format("Operator '%s' cannot be applied to '%s', '%s'",
                                             binEx.getOp().getType(),
@@ -335,6 +389,8 @@ public class NameResolver {
                                             r.getCanonicalName()));
                         }
                         return BaseEnvironment.TYPE_INT;
+                    case INSTANCEOF:
+                        return BaseEnvironment.TYPE_BOOLEAN;
                     default:
                         throw new RuntimeException(
                                 String.format("Error. Name resolver does not support the '%s' operator",
@@ -348,8 +404,13 @@ public class NameResolver {
                 for (Expression expr : instanceCreation.getArgList()) {
                     argTypes.add(resolveExpression(expr, env));
                 }
-                String constructorSig = Constructor.getConstructorSignature(type.getCanonicalName() + "." + type.getName(), argTypes);
-                Constructor m = env.lookupConstructor(constructorSig);
+                String constructorSig = Constructor.getConstructorSignature(type.getName(), argTypes);
+                Object o = type.get(constructorSig);
+                if (o == null) {
+                    throw new NameResolutionException(curClass.getFileName(), instanceCreation,
+                            String.format("No constructor found in '%s' that matches '%s'", type.getName(),
+                                    constructorSig));
+                }
                 return type;
             }
             case Expression.LITERAL_EXPRESSION: {
@@ -388,7 +449,6 @@ public class NameResolver {
                 return curClass;
             }
             case Expression.UNARY_EXPRESSION: {
-
                 UnaryExpression unary = (UnaryExpression) ex;
                 Class k = resolveExpression(unary.getExpression(), env);
                 if (unary instanceof CastExpression) {
@@ -402,6 +462,8 @@ public class NameResolver {
                 switch (unary.getOp().getType()) {
                     case NOT:
                         return BaseEnvironment.TYPE_BOOLEAN;
+                    case MINUS:
+                        return k;
                     default:
                         throw new RuntimeException(
                                 String.format("Error. Name resolver does not support the unary '%s' operator",
@@ -414,7 +476,7 @@ public class NameResolver {
                 if (varExpr instanceof FieldVariable) {
                     FieldVariable fVar = (FieldVariable) varExpr;
                     Class c = resolveExpression(fVar.getPrefixExpr(), env);
-                    varName = c.getCanonicalName() + "." + fVar.getFieldName();
+                    return c.getEnvironment().lookupField(fVar.getFieldName()).getType();
                 } else if (varExpr instanceof NameVariable) {
                     NameVariable nVar = (NameVariable) varExpr;
                     varName = nVar.getName();
@@ -462,12 +524,15 @@ public class NameResolver {
                         }
                     }
                 } catch (EnvironmentException e) {
-                    throw new NameResolutionException(c.getFileName(), new AstNode(),
-                            String.format("Package import refers to a class '%s'", s));
+                    throw new NameResolutionException(c.getFileName(), new AstNode(), e.getMessage());
                 }
             } else {
                 try {
                     Class clazz = baseEnvironment.lookupClazz(parts, false);
+                    if (clazz.getName().equals(c.getName()) && clazz != c) {
+                        throw new NameResolutionException(c.getFileName(), fn.getTypeDecl(),
+                                String.format("Class '%s' is already defined in this compilation unit", c.getName()));
+                    }
                     Object o = singleImportEnv.put(clazz.getName(), clazz);
                     if (o != null && o != clazz) {
                         Class oldClass = (Class) o;
@@ -514,7 +579,9 @@ public class NameResolver {
 
             for (VarDecl vd : clazz.getFieldDeclarations()) {
                 try {
-                    c.putField(new Field(c, vd, env));
+                    Field f = new Field(c, vd, env);
+                    vd.setProper(f);
+                    c.putField(f);
                 } catch (EnvironmentException e) {
                     throwNameResolutionException(e, curClass.getFileName(), vd);
                 }
