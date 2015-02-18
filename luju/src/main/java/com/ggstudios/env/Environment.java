@@ -6,6 +6,10 @@ import com.ggstudios.types.ReferenceType;
 public abstract class Environment {
     public abstract LookupResult lookupName(String[] name);
 
+    public LookupResult lookupName(String name) {
+        return lookupName(name.split("\\."));
+    }
+
     public Class lookupClazz(ReferenceType type) {
         return lookupClazz(type.getTypeAsArray(), type.isArray());
     }
