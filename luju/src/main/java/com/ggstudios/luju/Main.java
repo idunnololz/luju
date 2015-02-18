@@ -116,8 +116,11 @@ public class Main {
             ts.runTests(argList.assignmentNumber);
         } else {
             LuJuCompiler compiler = new LuJuCompiler(argList.maxThreads);
-            compiler.compileWith(argList);
-            compiler.shutdown();
+            try {
+                compiler.compileWith(argList);
+            } finally {
+                compiler.shutdown();
+            }
         }
     }
 
