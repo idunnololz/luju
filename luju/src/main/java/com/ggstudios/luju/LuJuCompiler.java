@@ -3,6 +3,7 @@ package com.ggstudios.luju;
 import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.error.ParseException;
 import com.ggstudios.error.TokenException;
+import com.ggstudios.error.TypeException;
 import com.ggstudios.error.WeedException;
 import com.ggstudios.types.AstNode;
 import com.ggstudios.utils.ExceptionUtils;
@@ -91,6 +92,10 @@ public class LuJuCompiler {
         } catch (NameResolutionException e) {
             AstNode n = e.getNode();
             Print.e(String.format("LuJu: %s: NameResolutionException(%d, %d): %s", e.getFile(), n.getRow(), n.getCol(), e.getMessage()));
+            return processError(RETURN_CODE_ERROR);
+        } catch (TypeException e) {
+            AstNode n = e.getNode();
+            Print.e(String.format("LuJu: %s: %s(%d, %d): %s", e.getFile(), e.getClass().getSimpleName(), n.getRow(), n.getCol(), e.getMessage()));
             return processError(RETURN_CODE_ERROR);
         }
 
