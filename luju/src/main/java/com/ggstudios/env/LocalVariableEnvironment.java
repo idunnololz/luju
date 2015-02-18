@@ -49,8 +49,14 @@ public class LocalVariableEnvironment extends Environment {
             if (name.length == 1) return new LookupResult(val, 1);
             int i = 1;
             Object o = val.getType();
-            while (i != name.length && o instanceof Map) {
-                o = ((Map) o).get(name[i++]);
+            while (i != name.length) {
+                if (o instanceof Map) {
+                    o = ((Map) o).get(name[i++]);
+                } else if (o instanceof Field) {
+                    o = ((Field) o).getType().get(name[i++]);
+                } else {
+                    break;
+                }
             }
             return new LookupResult(o, i);
         } else {
