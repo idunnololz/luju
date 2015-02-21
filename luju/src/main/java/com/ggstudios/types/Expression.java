@@ -14,6 +14,7 @@ public class Expression extends AstNode {
     public static final int THIS_EXPRESSION                 = 9;
     public static final int UNARY_EXPRESSION                = 10;
     public static final int VARIABLE_EXPRESSION             = 11;
+    public static final int TYPE_OR_VARIABLE_EXPRESSION     = 12;
 
 
     private boolean enclosedInParen = false;

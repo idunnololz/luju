@@ -39,10 +39,6 @@ public class NameVariable extends VariableExpression {
         }
     }
 
-    public void addId(Token id) {
-        idSeq.add(id);
-    }
-
     public List<Token> getIdSeq() {
         return idSeq;
     }

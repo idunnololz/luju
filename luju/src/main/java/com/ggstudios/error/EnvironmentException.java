@@ -8,6 +8,8 @@ public class EnvironmentException extends RuntimeException {
     public static final int ERROR_NOT_FOUND = 2;
     public static final int ERROR_PACKAGE_IS_CLASS = 3;
     public static final int ERROR_SAME_VARIABLE_IN_SCOPE = 4;
+    public static final int ERROR_NON_STATIC_FIELD_FROM_STATIC_CONTEXT = 5;
+    public static final int ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT = 6;
 
     public EnvironmentException(String message, int type) {
         super(message);

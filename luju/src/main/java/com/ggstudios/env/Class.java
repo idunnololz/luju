@@ -167,12 +167,39 @@ public class Class extends HashMap<String, Object> {
     }
 
     public static boolean isValidAssign(Class lhs, Class rhs) {
-        return (lhs == rhs || rhs == BaseEnvironment.TYPE_NULL || isSuperClassOf(lhs, rhs));
+        int l = getPrimitiveLevel(lhs);
+        int r = getPrimitiveLevel(rhs);
+        if (lhs == BaseEnvironment.TYPE_SHORT && rhs == BaseEnvironment.TYPE_CHAR) {
+            // This is explicitly coded because this is a rule specific to Joos only (and not Java)
+            return false;
+        }
+        if (l != 0 && r != 0) {
+            return lhs == rhs || l > r;
+        }
+        if (rhs == BaseEnvironment.TYPE_NULL) {
+            if (lhs.isPrimitive()) {
+                return false;
+            }
+            return true;
+        }
+
+        return (lhs == rhs || isSuperClassOf(lhs, rhs));
     }
 
     private static final HashMap<Class, Integer> classToCategory = new HashMap<>();
+    private static final HashMap<Class, Integer> classToLevel = new HashMap<>();
     public static final int CATEGORY_NUMBER = 0x00000001;
     private static final int CATEGORY_BOOLEAN = 0x00000002;
+
+    private static int getPrimitiveLevel(Class c) {
+        if (classToLevel.size() == 0) {
+            classToLevel.put(BaseEnvironment.TYPE_BYTE,     0x0000000F);
+            classToLevel.put(BaseEnvironment.TYPE_CHAR,     0x0000000F);
+            classToLevel.put(BaseEnvironment.TYPE_SHORT,    0x00000FFF);
+            classToLevel.put(BaseEnvironment.TYPE_INT,      0x0000FFFF);
+        }
+        return classToLevel.getOrDefault(c, 0);
+    }
 
     public static int getCategory(Class c) {
         if (classToCategory.size() == 0) {
@@ -205,9 +232,9 @@ public class Class extends HashMap<String, Object> {
         if (rhs.isArray() && lhs == BaseEnvironment.TYPE_OBJECT) {
             return true;
         }
-//        else if (lhs.isArray() != rhs.isArray()) {
-//            return false;
-//        }
+        else if (lhs.isArray() != rhs.isArray()) {
+            return false;
+        }
 
         Class superClass = rhs.getSuperClass();
         Class[] interfaces = rhs.getInterfaces();
@@ -250,5 +277,13 @@ public class Class extends HashMap<String, Object> {
 
     public int getModifiers() {
         return modifiers;
+    }
+
+    public boolean isPrimitive() {
+        return false;
+    }
+
+    public boolean isSimple() {
+        return false;
     }
 }

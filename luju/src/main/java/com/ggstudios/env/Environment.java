@@ -4,10 +4,18 @@ import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.types.ReferenceType;
 
 public abstract class Environment {
-    public abstract LookupResult lookupName(String[] name);
+    protected static boolean inStaticMode = false;
+    protected static boolean allowNonStatic = true;
 
-    public LookupResult lookupName(String name) {
-        return lookupName(name.split("\\."));
+    public static void setStaticMode(boolean mode) {
+        inStaticMode = mode;
+    }
+
+    public abstract LookupResult lookup(String[] name);
+
+    public LookupResult lookupName(String[] name) {
+        allowNonStatic = !inStaticMode;
+        return lookup(name);
     }
 
     public Class lookupClazz(ReferenceType type) {
@@ -31,7 +39,7 @@ public abstract class Environment {
             // TODO implement this better...
             r = thisComp.lookupName(name, true);
         } else {
-            r = lookupName(name);
+            r = lookup(name);
         }
 
         if (r == null || r.result == null || !(r.result instanceof Class) || r.tokensConsumed != name.length) {

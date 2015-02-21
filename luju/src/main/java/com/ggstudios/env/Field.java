@@ -9,6 +9,9 @@ public class Field {
     protected Class type;
     protected String name;
 
+    private int modifiers;
+    private boolean initialized = false;
+
     protected Field() {}
 
     public Field(Class declaringClass, VarDecl vDecl, Environment env) {
@@ -17,13 +20,15 @@ public class Field {
 
         type = env.lookupClazz(vDecl.getType());
         name = varDecl.getName();
+        modifiers = vDecl.getModifiers();
     }
 
-    public Field(Class declaringClass, Class type, String name) {
+    public Field(Class declaringClass, Class type, String name, int modifiers) {
         this.declaringClass = declaringClass;
 
         this.type = type;
         this.name = name;
+        this.modifiers = modifiers;
     }
 
     public String getName() {
@@ -43,4 +48,14 @@ public class Field {
     }
 
     public boolean isLiteral() { return false; }
+
+    public int getModifiers() { return modifiers; }
+
+    public boolean isInitialized() {
+        return initialized;
+    }
+
+    public void initialize() {
+        initialized = true;
+    }
 }

@@ -20,6 +20,7 @@ import com.ggstudios.types.LiteralExpression;
 import com.ggstudios.types.MethodExpression;
 import com.ggstudios.types.NameVariable;
 import com.ggstudios.types.ThisExpression;
+import com.ggstudios.types.TypeOrVariableExpression;
 import com.ggstudios.types.UnaryExpression;
 import com.ggstudios.types.VarDecl;
 import com.ggstudios.types.VarInitDecl;
@@ -466,6 +467,9 @@ public class AstGenerator {
             List<IfStatement.IfBlock> ifBlocks = otherIf.getIfBlocks();
             ifBlocks.add(0, new IfStatement.IfBlock(expr, body));
             ifs.setIfBlocks(ifBlocks);
+            if (otherIf.getElseBlock() != null) {
+                ifs.setElseBlock(otherIf.getElseBlock());
+            }
         } else {
             ifs.addIfBlock(expr, body);
             ifs.setElseBlock(new IfStatement.ElseBlock(elseS));
@@ -1014,12 +1018,18 @@ public class AstGenerator {
 
         if (methodInvocation.prod.rhs[0] == ParseTable.NONT_NAME) {
             NameVariable nVar = getName(methodInvocation.children.get(0));
-            methodExpr.setMethodIdExpr(nVar);
+            List<Token> idSeq = nVar.getIdSeq();
+            if (idSeq.size() == 1) {
+                methodExpr.setMethodName(idSeq.get(0).getRaw());
+            } else {
+                methodExpr.setMethodName(idSeq.get(idSeq.size() - 1).getRaw());
+                idSeq.remove(idSeq.size() - 1);
+                methodExpr.setPrefixExpression(new TypeOrVariableExpression(idSeq));
+            }
             methodExpr.setArgList(getOptArgumentList(methodInvocation.children.get(2)));
         } else if (methodInvocation.prod.rhs[0] == ParseTable.NONT_PRIMARY) {
-            FieldVariable fVar = new FieldVariable(methodInvocation.children.get(2).t,
-                    getPrimary(methodInvocation.children.get(0)));
-            methodExpr.setMethodIdExpr(fVar);
+            methodExpr.setPrefixExpression(getPrimary(methodInvocation.children.get(0)));
+            methodExpr.setMethodName(methodInvocation.children.get(2).t.getRaw());
             methodExpr.setArgList(getOptArgumentList(methodInvocation.children.get(4)));
         } else {
             throw new IllegalStateException("MethodInvocation rule not found.");

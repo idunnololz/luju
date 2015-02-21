@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * BaseEnvironment represents the environment that contains all fields and methods of all classes.
  */
-public class BaseEnvironment extends Environment {
+public class BaseEnvironment extends MapEnvironment {
 
     // A map of maps detailin
     //
@@ -29,13 +29,13 @@ public class BaseEnvironment extends Environment {
         "int", "boolean", "short", "char", "void", "byte"
     };
 
-    public static final Class TYPE_INT = new PrimitiveClass("int");
-    public static final Class TYPE_BOOLEAN = new PrimitiveClass("boolean");
-    public static final Class TYPE_SHORT = new PrimitiveClass("short");
-    public static final Class TYPE_CHAR = new PrimitiveClass("char");
-    public static final Class TYPE_VOID = new PrimitiveClass("void");
-    public static final Class TYPE_BYTE = new PrimitiveClass("byte");
-    public static final Class TYPE_NULL = new PrimitiveClass("null");
+    public static final Class TYPE_INT = new PrimitiveClass("int", true);
+    public static final Class TYPE_BOOLEAN = new PrimitiveClass("boolean", true);
+    public static final Class TYPE_SHORT = new PrimitiveClass("short", true);
+    public static final Class TYPE_CHAR = new PrimitiveClass("char", true);
+    public static final Class TYPE_VOID = new PrimitiveClass("void", true);
+    public static final Class TYPE_BYTE = new PrimitiveClass("byte", true);
+    public static final Class TYPE_NULL = new PrimitiveClass("null", false);
     public static Class TYPE_OBJECT;
     public static Class TYPE_OBJECT_BOOLEAN;
     public static Class TYPE_STRING;
@@ -47,6 +47,7 @@ public class BaseEnvironment extends Environment {
     }
 
     public BaseEnvironment(Ast ast) {
+        map = baseMap;
         int len = ast.size();
 
         for (int i = 0; i < len; i++) {
@@ -149,31 +150,5 @@ public class BaseEnvironment extends Environment {
             }
         }
         return classes;
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public LookupResult lookupName(String[] name) {
-        Map<String, Object> m = baseMap;
-        for (int i = 0; i < name.length; i++) {
-            String s = name[i];
-
-            if (m.containsKey(s)) {
-                Object o = m.get(s);
-                if (o instanceof Class) {
-                    Class cm = (Class) o;
-                    if (name.length == i + 1) {
-                        return new LookupResult(cm, i + 1);
-                    } else {
-                        return new LookupResult(cm.get(name[i + 1]), i + 2);
-                    }
-                } else {
-                    m = (Map<String, Object>) m.get(s);
-                }
-            } else {
-                return null;
-            }
-        }
-        return null;
     }
 }

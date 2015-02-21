@@ -2,6 +2,10 @@ package com.ggstudios.luju;
 
 import com.ggstudios.env.*;
 import com.ggstudios.env.Class;
+import com.ggstudios.env.Constructor;
+import com.ggstudios.env.Field;
+import com.ggstudios.env.Method;
+import com.ggstudios.env.Modifier;
 import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.error.IncompatibleTypeException;
 import com.ggstudios.error.InconvertibleTypeException;
@@ -30,6 +34,7 @@ import com.ggstudios.types.ReferenceType;
 import com.ggstudios.types.ReturnStatement;
 import com.ggstudios.types.Statement;
 import com.ggstudios.types.TypeDecl;
+import com.ggstudios.types.TypeOrVariableExpression;
 import com.ggstudios.types.UnaryExpression;
 import com.ggstudios.types.VarDecl;
 import com.ggstudios.types.VarInitDecl;
@@ -47,9 +52,17 @@ public class NameResolver {
     private BaseEnvironment baseEnvironment;
 
     private Class curClass;
+    private boolean inStaticContext = false;
+    private boolean checkingFields = false;
+    private Method curMethod;
+    private Field curField;
 
     public void resolveNames(Ast ast) {
         baseEnvironment = new BaseEnvironment(ast);
+
+        forgiveForwardUsage = false;
+        inStaticContext = false;
+        checkingFields = false;
 
         // strategy for resolving everything:
         // 1.  We start with an environment that only contains all class members
@@ -144,9 +157,17 @@ public class NameResolver {
             TypeDecl typeDecl = c.getClassDecl();
             if (!c.isInterface()) {
                 ClassDecl cDecl = (ClassDecl) typeDecl;
+                checkingFields = true;
                 for (VarDecl vd : cDecl.getFieldDeclarations()) {
                     try {
+                        Field f = env.lookupField(vd.getName());
                         if (vd instanceof VarInitDecl) {
+                            if (Modifier.isStatic(vd.getModifiers())) {
+                                inStaticContext = true;
+                            } else {
+                                inStaticContext = false;
+                            }
+                            curField = f;
                             VarInitDecl vid = (VarInitDecl) vd;
                             Expression expr = vid.getExpr();
                             Class expressonType = resolveExpression(expr, env);
@@ -155,16 +176,20 @@ public class NameResolver {
                                         vid.getProper().getType(), expressonType);
                             }
                         }
+                        f.initialize();
                     } catch (EnvironmentException e) {
                         throwNameResolutionException(e, c.getFileName(), vd);
                     }
                 }
+                checkingFields = false;
 
+                // Constructors are always non-static
+                inStaticContext = false;
                 for (ConstructorDecl cd : cDecl.getConstructorDeclaration()) {
                     Environment curEnv = env;
                     for (VarDecl vd : cd.getArguments()) {
                         try {
-                            Variable v = new Variable(cd.getMethod(), vd, curEnv);
+                            Variable v = new Variable(cd.getProper(), vd, curEnv);
                             curEnv = new LocalVariableEnvironment(v.getName(), v, curEnv);
                         } catch (EnvironmentException e) {
                             throwNameResolutionException(e, c.getFileName(), vd);
@@ -184,14 +209,20 @@ public class NameResolver {
             }
 
             for (MethodDecl meth : typeDecl.getMethodDeclarations()) {
+                if (Modifier.isStatic(meth.getModifiers())) {
+                    inStaticContext = true;
+                } else {
+                    inStaticContext = false;
+                }
                 if (meth.isAbstract() && isNonAbstractClass) {
                     throw new NameResolutionException(c.getFileName(), meth,
                             "Abstract method in non-abstract class");
                 }
+                curMethod = meth.getProper();
                 Environment curEnv = env;
                 for (VarDecl vd : meth.getArguments()) {
                     try {
-                        Variable v = new Variable(meth.getMethod(), vd, curEnv);
+                        Variable v = new Variable(meth.getProper(), vd, curEnv);
                         curEnv = new LocalVariableEnvironment(v.getName(), v, curEnv);
                     } catch (EnvironmentException e) {
                         throwNameResolutionException(e, c.getFileName(), vd);
@@ -212,7 +243,6 @@ public class NameResolver {
     }
 
     private Environment resolveStatement(Statement s, Environment env) {
-        // TODO
         switch (s.getStatementType()) {
             case Statement.TYPE_BLOCK: {
                 Block b = (Block) s;
@@ -271,14 +301,26 @@ public class NameResolver {
             case Statement.TYPE_RETURN: {
                 ReturnStatement returnStatement = (ReturnStatement) s;
                 Expression e = returnStatement.getExpression();
-                if (e != null) {
-                    resolveExpression(e, env);
+                Class returnType = curMethod.getReturnType();
+                if (returnType != BaseEnvironment.TYPE_VOID && e == null) {
+                    throw new TypeException(curClass.getFileName(), returnStatement,
+                            "Missing return value");
+                } else if (returnType == BaseEnvironment.TYPE_VOID && e != null) {
+                    throw new TypeException(curClass.getFileName(), returnStatement,
+                            "Cannot return a value from a method with void result type");
+                } else if (e != null) {
+                    Class type = resolveExpression(e, env);
+                    if (!Class.isValidAssign(curMethod.getReturnType(), type)) {
+                        throw new IncompatibleTypeException(curClass.getFileName(), returnStatement,
+                                curMethod.getReturnType(), type);
+                    }
                 }
                 break;
             }
             case Statement.TYPE_VARDECL: {
                 VarDecl vd = (VarDecl) s;
                 Variable var = new Variable(null, vd, env);
+                env = new LocalVariableEnvironment(var.getName(), var, env);
                 if (vd instanceof VarInitDecl) {
                     VarInitDecl vid = (VarInitDecl) vd;
                     Class type = resolveExpression(vid.getExpr(), env);
@@ -287,8 +329,6 @@ public class NameResolver {
                                 var.getType(), type);
                     }
                 }
-
-                env = new LocalVariableEnvironment(var.getName(), var, env);
                 break;
             }
             case Statement.TYPE_WHILE: {
@@ -305,6 +345,8 @@ public class NameResolver {
         return env;
     }
 
+    private boolean forgiveForwardUsage = false;
+
     public Class resolveExpression(Expression ex, Environment env) {
         switch (ex.getExpressionType()) {
             case Expression.ARRAY_ACCESS_EXPRESSION: {
@@ -314,24 +356,44 @@ public class NameResolver {
                 if (!varType.isArray()) {
                     throw new TypeException(curClass.getFileName(), ex,
                             String.format("Array type expected; found: '%s'", varType.getCanonicalName()));
-                } else if (indexType != BaseEnvironment.TYPE_INT) {
+                } else if (!Class.isValidAssign(BaseEnvironment.TYPE_INT, indexType)) {
                     throw new IncompatibleTypeException(curClass.getFileName(), ex,
                             BaseEnvironment.TYPE_INT, indexType);
                 }
+                inStaticContext = false;
                 return varType.getSuperClass();
             }
             case Expression.ARRAY_CREATION_EXPRESSION: {
                 ArrayCreationExpression arrayCreation = (ArrayCreationExpression) ex;
                 Class varType = resolveExpression(arrayCreation.getTypeExpr(), env);
                 Class indexType = resolveExpression(arrayCreation.getDimExpr(), env);
-                if (indexType != BaseEnvironment.TYPE_INT) {
+                if (!Class.isValidAssign(BaseEnvironment.TYPE_INT, indexType)) {
                     throw new IncompatibleTypeException(curClass.getFileName(), ex,
                             BaseEnvironment.TYPE_INT, indexType);
                 }
+                inStaticContext = false;
                 return varType.getArrayClass();
             }
             case Expression.ASSIGN_EXPRESSION: {
                 AssignExpression assign = (AssignExpression) ex;
+                if (checkingFields) {
+                    Expression e = assign.getLhs();
+                    if (e.getExpressionType() == Expression.VARIABLE_EXPRESSION) {
+                        VariableExpression varExpr = (VariableExpression) e;
+                        Field f = null;
+                        if (varExpr instanceof FieldVariable) {
+                            FieldVariable fVar = (FieldVariable) varExpr;
+                            Class c = resolveExpression(fVar.getPrefixExpr(), env);
+                            f = c.getEnvironment().lookupField(fVar.getFieldName());
+                        } else if (varExpr instanceof NameVariable) {
+                            NameVariable nVar = (NameVariable) varExpr;
+                            f = env.lookupField(nVar.getName());
+                        }
+                        if (f.getDeclaringClass() == curClass) {
+                            forgiveForwardUsage = true;
+                        }
+                    }
+                }
                 Class lhsType = resolveExpression(assign.getLhs(), env);
                 Class rhsType = resolveExpression(assign.getRhs(), env);
                 if (!Class.isValidAssign(lhsType, rhsType)) {
@@ -396,6 +458,9 @@ public class NameResolver {
                         }
                         return BaseEnvironment.TYPE_INT;
                     case INSTANCEOF:
+                        if (l.isSimple()) {
+                            throw new InconvertibleTypeException(curClass.getFileName(), ex, l, r);
+                        }
                         return BaseEnvironment.TYPE_BOOLEAN;
                     default:
                         throw new RuntimeException(
@@ -417,6 +482,7 @@ public class NameResolver {
                             String.format("No constructor found in '%s' that matches '%s'", type.getName(),
                                     constructorSig));
                 }
+                inStaticContext = false;
                 return type;
             }
             case Expression.LITERAL_EXPRESSION: {
@@ -427,29 +493,26 @@ public class NameResolver {
             }
             case Expression.METHOD_EXPRESSION: {
                 MethodExpression meth = (MethodExpression) ex;
-                VariableExpression varExpr = meth.getMethodIdExpr();
                 String methodName = null;
-                if (varExpr instanceof FieldVariable) {
-                    FieldVariable fVar = (FieldVariable) varExpr;
-                    Class c = resolveExpression(fVar.getPrefixExpr(), env);
-                    methodName = c.getCanonicalName() + "." + fVar.getFieldName();
-                } else if (varExpr instanceof NameVariable) {
-                    NameVariable nVar = (NameVariable) varExpr;
-                    methodName = nVar.getName();
-                }
-                //Clazz type = resolveExpression(meth.getMethodIdExpr(), env);
+                Expression e = meth.getPrefixExpression();
                 List<Class> argTypes = new ArrayList<>();
                 for (Expression expr : meth.getArgList()) {
                    argTypes.add(resolveExpression(expr, env));
                 }
-                String methSig = Method.getMethodSignature(methodName, argTypes);
-                Method m = env.lookupMethod(methSig);
+                String methSig = Method.getMethodSignature(meth.getMethodName(), argTypes);
+                Method m;
+                if (e != null) {
+                    m = resolveExpression(e, env).getEnvironment().lookupMethod(methSig);
+                } else {
+                    m = env.lookupMethod(methSig);
+                }
                 return m.getReturnType();
             }
             case Expression.REFERENCE_TYPE: {
                 ReferenceType refType = (ReferenceType) ex;
-                refType.setProper(env.lookupClazz(refType));
-                return refType.getProper();
+                Class type = env.lookupClazz(refType);
+                refType.setProper(type);
+                return type;
             }
             case Expression.THIS_EXPRESSION: {
                 return curClass;
@@ -465,10 +528,19 @@ public class NameResolver {
                     }
                     return castType;
                 }
+
                 switch (unary.getOp().getType()) {
                     case NOT:
+                        if (k != BaseEnvironment.TYPE_BOOLEAN) {
+                            throw new TypeException(curClass.getFileName(), unary,
+                                   String.format("Operator '!' cannot be applied to '%s'", k.getName()));
+                        }
                         return BaseEnvironment.TYPE_BOOLEAN;
                     case MINUS:
+                        if (k != BaseEnvironment.TYPE_INT) {
+                            throw new TypeException(curClass.getFileName(), unary,
+                                    String.format("Operator '-' cannot be applied to '%s'", k.getName()));
+                        }
                         return k;
                     default:
                         throw new RuntimeException(
@@ -479,21 +551,82 @@ public class NameResolver {
             case Expression.VARIABLE_EXPRESSION: {
                 VariableExpression varExpr = (VariableExpression) ex;
                 String varName = null;
+                Field f = null;
                 if (varExpr instanceof FieldVariable) {
                     FieldVariable fVar = (FieldVariable) varExpr;
                     Class c = resolveExpression(fVar.getPrefixExpr(), env);
-                    return c.getEnvironment().lookupField(fVar.getFieldName()).getType();
+                    if (inStaticContext) {
+                        Environment.setStaticMode(true);
+                    }
+                    f = c.getEnvironment().lookupField(fVar.getFieldName());
+                    if (inStaticContext) {
+                        Environment.setStaticMode(false);
+                    }
                 } else if (varExpr instanceof NameVariable) {
                     NameVariable nVar = (NameVariable) varExpr;
                     varName = nVar.getName();
+                    if (checkingFields) {
+                        LookupResult r = env.lookupName(new String[]{nVar.getId().getRaw()});
+                        if (r != null && r.result instanceof Field) {
+                            Field field = (Field) r.result;
+                            ensureValidReference(curField, field);
+                        }
+                    }
+
+                    if (inStaticContext) {
+                        Environment.setStaticMode(true);
+                    }
+                    f = env.lookupField(varName);
+                    if (inStaticContext) {
+                        Environment.setStaticMode(false);
+                    }
                 }
-                return env.lookupField(varName).getType();
+                return f.getType();
+            }
+            case Expression.TYPE_OR_VARIABLE_EXPRESSION: {
+                TypeOrVariableExpression typeOrVar = (TypeOrVariableExpression) ex;
+                String[] arr = typeOrVar.getTypeAsArray();
+                LookupResult result = env.lookupName(arr);
+                if (result == null || result.tokensConsumed != arr.length) {
+                    String fullName = typeOrVar.toString();
+                    throw new EnvironmentException("", EnvironmentException.ERROR_NOT_FOUND,
+                            fullName);
+                }
+                Object res = result.result;
+                if (res instanceof Field) {
+                    inStaticContext = false;
+                    Field f = (Field) res;
+                    if (checkingFields) {
+                        LookupResult r = env.lookupName(new String[]{arr[0]});
+                        if (r != null && r.result instanceof Field) {
+                            Field field = (Field) r.result;
+                            ensureValidReference(curField, field);
+                        }
+                    }
+                    return f.getType();
+                } else if (res instanceof Class) {
+                    return (Class) res;
+                } else {
+                    String fullName = typeOrVar.toString();
+                    throw new EnvironmentException("", EnvironmentException.ERROR_NOT_FOUND,
+                            fullName);
+                }
             }
             default:
                 throw new RuntimeException(
                         String.format("Error. Name resolver does not support the expression type '%s'",
                                 ex.getClass().getSimpleName()));
         }
+    }
+
+    private void ensureValidReference(Field curField, Field f) {
+        boolean forgiven = forgiveForwardUsage;
+        if (forgiveForwardUsage) forgiveForwardUsage = false;
+        if (f.getDeclaringClass() != curField.getDeclaringClass()) return;
+        if (Modifier.isStatic(f.getModifiers()) && !Modifier.isStatic(curField.getModifiers())) return;
+        if (f.isInitialized()) return;
+        if (forgiven) return;
+        throw new NameResolutionException(curClass.getFileName(), f.getVarDecl(), "Illegal forward reference");
     }
 
     @SuppressWarnings("unchecked")
@@ -566,7 +699,7 @@ public class NameResolver {
         List<MethodDecl> methods = c.getClassDecl().getMethodDeclarations();
         for (MethodDecl m : methods) {
             Method method = new Method(c, m, env);
-            m.setMethod(method);
+            m.setProper(method);
             c.putMethod(method);
         }
 
@@ -681,12 +814,16 @@ public class NameResolver {
                                 String.format("'%s' in '%s' clashes with '%s' in '%s'; attempting to use incompatible return type",
                                         newMeth.getHumanReadableSignature(), newMeth.getDeclaringClass().getCanonicalName(),
                                         oldMeth.getHumanReadableSignature(), oldMeth.getDeclaringClass().getCanonicalName()));
-                    } else if (Modifier.isPublic(oldMeth.getModifiers()) && Modifier.isProtected(newMeth.getModifiers())) {
-                        throw new NameResolutionException(c.getFileName(), newMeth.getMethodDecl(),
-                                String.format("'%s' in '%s' clashes with '%s' in '%s'; attempting to assign weaker access privileges",
-                                        newMeth.getHumanReadableSignature(), newMeth.getDeclaringClass().getCanonicalName(),
-                                        oldMeth.getHumanReadableSignature(), oldMeth.getDeclaringClass().getCanonicalName()));
-                    } else if (Modifier.isFinal(oldMeth.getModifiers())) {
+                    } else if (Modifier.isPublic(oMods) && Modifier.isProtected(nMods)) {
+                        if (Modifier.isAbstract(oMods) && Modifier.isAbstract(nMods) && newMeth.getDeclaringClass() != c) {
+                            c.put(entry.getKey(), oldMeth);
+                        } else {
+                            throw new NameResolutionException(c.getFileName(), newMeth.getMethodDecl(),
+                                    String.format("'%s' in '%s' clashes with '%s' in '%s'; attempting to assign weaker access privileges",
+                                            newMeth.getHumanReadableSignature(), newMeth.getDeclaringClass().getCanonicalName(),
+                                            oldMeth.getHumanReadableSignature(), oldMeth.getDeclaringClass().getCanonicalName()));
+                        }
+                    } else if (Modifier.isFinal(oMods)) {
                         throw new NameResolutionException(c.getFileName(), newMeth.getMethodDecl(),
                                 String.format("'%s' cannot override '%s' in '%s'; overriden method is final",
                                         newMeth.getHumanReadableSignature(),
@@ -788,6 +925,16 @@ public class NameResolver {
                 throw new NameResolutionException(fileName, pos,
                         String.format("Variable '%s' is already defined in the scope",
                                 e.getExtra().toString()), e);
+            case EnvironmentException.ERROR_NON_STATIC_FIELD_FROM_STATIC_CONTEXT:
+                Field f = (Field) e.getExtra();
+                throw new TypeException(fileName, pos,
+                        String.format("Non-static field '%s' cannot be referenced from static context",
+                                f.getName()), e);
+            case EnvironmentException.ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT:
+                Method m = (Method) e.getExtra();
+                throw new TypeException(fileName, pos,
+                        String.format("Non-static method '%s' cannot be referenced from static context",
+                                m.getName()), e);
         }
     }
 }

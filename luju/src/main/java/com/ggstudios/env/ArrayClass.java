@@ -7,7 +7,7 @@ public class ArrayClass extends Class {
     private Environment env;
 
     public ArrayClass(Class c) {
-        putField(new Field(c, BaseEnvironment.TYPE_INT, "length"));
+        putField(new Field(c, BaseEnvironment.TYPE_INT, "length", Modifier.FINAL));
         baseClass = c;
 
         env = new ClassEnvironment(this);

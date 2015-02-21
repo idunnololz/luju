@@ -100,11 +100,11 @@ public class MethodDecl extends AstNode {
         this.block = block;
     }
 
-    public void setMethod(Method method) {
+    public void setProper(Method method) {
         this.method = method;
     }
 
-    public Method getMethod() {
+    public Method getProper() {
         return method;
     }
 

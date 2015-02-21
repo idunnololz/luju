@@ -1,9 +1,12 @@
 package com.ggstudios.types;
 
+import com.ggstudios.luju.Token;
+
 import java.util.List;
 
 public class MethodExpression extends Expression {
-    private VariableExpression methodIdExpr;
+    private Expression prefixExpr;
+    private String methodName;
     private List<Expression> argList;
 
     public MethodExpression() {
@@ -18,18 +21,14 @@ public class MethodExpression extends Expression {
         this.argList = argList;
     }
 
-    public VariableExpression getMethodIdExpr() {
-        return methodIdExpr;
-    }
-
-    public void setMethodIdExpr(VariableExpression methodIdExpr) {
-        this.methodIdExpr = methodIdExpr;
-    }
-
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append(methodIdExpr.toString());
+        if (prefixExpr != null) {
+            sb.append(prefixExpr.toString());
+            sb.append(".");
+        }
+        sb.append(methodName);
         sb.append("(");
         if (!argList.isEmpty()) {
             for (Expression a : argList) {
@@ -40,5 +39,21 @@ public class MethodExpression extends Expression {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    public void setMethodName(String methodName) {
+        this.methodName = methodName;
+    }
+
+    public String getMethodName() {
+        return methodName;
+    }
+
+    public void setPrefixExpression(Expression prefixExpression) {
+        this.prefixExpr = prefixExpression;
+    }
+
+    public Expression getPrefixExpression() {
+        return prefixExpr;
     }
 }

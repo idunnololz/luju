@@ -5,7 +5,7 @@ import com.ggstudios.utils.Print;
 
 import java.util.Map;
 
-public class LocalVariableEnvironment extends Environment {
+public class LocalVariableEnvironment extends SimpleEnvironment {
     private String key;
     private Variable val;
     private Environment rest;
@@ -44,23 +44,11 @@ public class LocalVariableEnvironment extends Environment {
     }
 
     @Override
-    public LookupResult lookupName(String[] name) {
-        if (name[0].equals(key)) {
-            if (name.length == 1) return new LookupResult(val, 1);
-            int i = 1;
-            Object o = val.getType();
-            while (i != name.length) {
-                if (o instanceof Map) {
-                    o = ((Map) o).get(name[i++]);
-                } else if (o instanceof Field) {
-                    o = ((Field) o).getType().get(name[i++]);
-                } else {
-                    break;
-                }
-            }
-            return new LookupResult(o, i);
+    protected Object lookupNameOneStep(String name) {
+        if (name.equals(key)) {
+            return val;
         } else {
-            return rest.lookupName(name);
+            return rest;
         }
     }
 }

@@ -5,12 +5,14 @@ import com.ggstudios.types.TypeDecl;
 public class PrimitiveClass extends Class {
     private Class arrayClass;
     private String typeName;
+    private boolean simple;
 
-    public PrimitiveClass(String typeName) {
+    public PrimitiveClass(String typeName, boolean simple) {
         this.typeName = typeName;
         arrayClass = new ArrayClass(this);
 
         setEnvironment(new ClassEnvironment(this));
+        this.simple = simple;
     }
 
     /**
@@ -65,5 +67,15 @@ public class PrimitiveClass extends Class {
     public void putMethod(Method method) {
         throw new IllegalStateException(String.format("Primitive type '%s' cannot have methods.",
                 getName()));
+    }
+
+    @Override
+    public boolean isPrimitive() {
+        return true;
+    }
+
+    @Override
+    public boolean isSimple() {
+        return simple;
     }
 }

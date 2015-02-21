@@ -1,6 +1,7 @@
 package com.ggstudios.types;
 
 import com.ggstudios.env.Field;
+import com.ggstudios.env.Modifier;
 import com.ggstudios.luju.Token;
 import com.ggstudios.utils.PrintUtils;
 
@@ -8,7 +9,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class VarDecl extends Statement {
-    private Set<Token.Type> modifiers = new HashSet<>();
+    private int modifiers = 0;
 
     private ReferenceType type;
 
@@ -19,12 +20,31 @@ public class VarDecl extends Statement {
         super(Statement.TYPE_VARDECL);
     }
 
-    public Set<Token.Type> getModifiers() {
+    public int getModifiers() {
         return modifiers;
     }
 
     public void addModifier(Token.Type mod) {
-        this.modifiers.add(mod);
+        switch (mod) {
+            case PUBLIC:
+                modifiers |= Modifier.PUBLIC;
+                break;
+            case PROTECTED:
+                modifiers |= Modifier.PROTECTED;
+                break;
+            case STATIC:
+                modifiers |= Modifier.STATIC;
+                break;
+            case FINAL:
+                modifiers |= Modifier.FINAL;
+                break;
+            case NATIVE:
+                modifiers |= Modifier.NATIVE;
+                break;
+            case ABSTRACT:
+                modifiers |= Modifier.ABSTRACT;
+                break;
+        }
     }
 
     public ReferenceType getType() {

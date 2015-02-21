@@ -1,11 +1,7 @@
 package com.ggstudios.env;
 
-import com.ggstudios.types.AstNode;
-
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedList;
-import java.util.List;
 
 /**
  * HACK: We are only using composite environment for class scope and class
@@ -23,31 +19,34 @@ public class CompositeEnvironment extends Environment {
     }
 
     @Override
-    public LookupResult lookupName(String[] name) {
+    public LookupResult lookup(String[] name) {
+        boolean temp = Environment.allowNonStatic;
         if (classMemEnv != null) {
-            LookupResult r = classMemEnv.lookupName(name);
+            LookupResult r = classMemEnv.lookup(name);
             if (r != null) {
                 return r;
             }
+            Environment.allowNonStatic = temp;
         }
         for (Environment e : environments) {
-            LookupResult r = e.lookupName(name);
+            LookupResult r = e.lookup(name);
             if (r != null) {
                 return r;
             }
+            Environment.allowNonStatic = temp;
         }
         return null;
     }
 
     public LookupResult lookupName(String[] name, boolean neglectClassMembers) {
         if (!neglectClassMembers && classMemEnv != null) {
-            LookupResult r = classMemEnv.lookupName(name);
+            LookupResult r = classMemEnv.lookup(name);
             if (r != null) {
                 return r;
             }
         }
         for (Environment e : environments) {
-            LookupResult r = e.lookupName(name);
+            LookupResult r = e.lookup(name);
             if (r != null) {
                 return r;
             }
