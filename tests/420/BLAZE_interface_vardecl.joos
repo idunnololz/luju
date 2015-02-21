@@ -1,9 +1,0 @@
-package example.pkg;
-
-import joos.io.pkg;
-
-public interface BLAZE_interface_vardecl {
-	void b();
-	int a;
-	BLAZE_interface_vardecl(){}
-}

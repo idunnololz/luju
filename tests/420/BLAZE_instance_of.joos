@@ -1,9 +1,0 @@
-package example.pkg;
-
-import joos.io.pkg;
-
-public abstract class BLAZE_instance_of {
-	BLAZE_instance_of() {
-		boolean b = x instanceof ((Integer));
-	}
-}

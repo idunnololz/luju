@@ -1,9 +1,0 @@
-package p.foo;
-import some.importt.*;
-
-class myClass implements myInterface {
-  static int blizz;
-  public void myMethod() {
-    blizz = 37;
-  }
-}

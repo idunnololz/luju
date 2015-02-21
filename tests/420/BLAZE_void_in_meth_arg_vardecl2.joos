@@ -1,8 +1,0 @@
-package example.pkg;
-
-import joos.io.pkg;
-
-public abstract class BLAZE_void_in_meth_arg_vardecl2 {
-  void a(int a, int b, void b) {}
-  BLAZE_void_in_meth_arg_vardecl2(){}
-}

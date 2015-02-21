@@ -1,8 +1,0 @@
-package example.pkg;
-
-import joos.io.pkg;
-
-public abstract class BLAZE_array_init {
-	int[] arg = new int[2]{0, 1};
-	BLAZE_array_init(){}
-}
