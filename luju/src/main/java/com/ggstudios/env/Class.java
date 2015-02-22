@@ -183,7 +183,11 @@ public class Class extends HashMap<String, Object> {
             return true;
         }
 
-        return (lhs == rhs || isSuperClassOf(lhs, rhs));
+        if (lhs == BaseEnvironment.TYPE_VOID || lhs == BaseEnvironment.TYPE_VOID) {
+            return false;
+        }
+
+        return isSuperClassOf(lhs, rhs);
     }
 
     private static final HashMap<Class, Integer> classToCategory = new HashMap<>();
@@ -218,11 +222,16 @@ public class Class extends HashMap<String, Object> {
             return res == getCategory(original);
         }
 
-        return (original == BaseEnvironment.TYPE_NULL || cast == original
-                || isSuperClassOf(cast, original) || isSuperClassOf(original, cast));
+        return (original == BaseEnvironment.TYPE_NULL ||
+                isSuperClassOf(cast, original) || isSuperClassOf(original, cast));
+    }
+
+    public boolean isSubClassOf(Class c) {
+        return isSuperClassOf(c, this);
     }
 
     private static boolean isSuperClassOf(Class lhs, Class rhs) {
+        if (lhs == rhs) return true;
         if (lhs == BaseEnvironment.TYPE_SERIALIZABLE || lhs == BaseEnvironment.TYPE_CLONEABLE) {
             return true;
         }

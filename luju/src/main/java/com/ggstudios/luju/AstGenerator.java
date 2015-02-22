@@ -995,7 +995,7 @@ public class AstGenerator {
         return new LiteralExpression(t);
     }
 
-    private Expression getArrayAccess(Node arrayAccess) {
+    private ArrayAccessExpression getArrayAccess(Node arrayAccess) {
         // arrayAccess -> name LBRACKET expression RBRACKET
         // arrayAccess -> primaryNoNewArray LBRACKET expression RBRACKET
         ArrayAccessExpression expr = new ArrayAccessExpression();

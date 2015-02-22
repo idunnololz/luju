@@ -9,6 +9,7 @@ public class ExpressionStatement extends Statement {
 
     public ExpressionStatement(Expression expr) {
         super(Statement.TYPE_EXPRESSION);
+        setPos(expr);
         this.expr = expr;
     }
 

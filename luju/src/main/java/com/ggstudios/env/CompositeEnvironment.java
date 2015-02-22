@@ -8,11 +8,11 @@ import java.util.LinkedList;
  */
 public class CompositeEnvironment extends Environment {
     private Environment classMemEnv;
-    private Deque<Environment> environments = new LinkedList<>();
 
-    public void addEnvironment(Environment e) {
-        environments.addFirst(e);
-    }
+    private Environment baseEnvironment;
+    private Environment multiImportEnvironment;
+    private Environment packageEnvironment;
+    private Environment singleImportEnvironment;
 
     public void setClassMemberEnvironment(Environment e) {
         classMemEnv = e;
@@ -20,37 +20,63 @@ public class CompositeEnvironment extends Environment {
 
     @Override
     public LookupResult lookup(String[] name) {
-        boolean temp = Environment.allowNonStatic;
-        if (classMemEnv != null) {
-            LookupResult r = classMemEnv.lookup(name);
-            if (r != null) {
-                return r;
-            }
-            Environment.allowNonStatic = temp;
-        }
-        for (Environment e : environments) {
-            LookupResult r = e.lookup(name);
-            if (r != null) {
-                return r;
-            }
-            Environment.allowNonStatic = temp;
-        }
-        return null;
+        return lookupName(name, false);
     }
 
     public LookupResult lookupName(String[] name, boolean neglectClassMembers) {
+        boolean temp = Environment.allowNonStatic;
+        boolean temp2 = Environment.allowProtected;
+
+        LookupResult r;
         if (!neglectClassMembers && classMemEnv != null) {
-            LookupResult r = classMemEnv.lookup(name);
+            Environment.allowProtected = true;
+            r = classMemEnv.lookup(name);
             if (r != null) {
                 return r;
             }
+            Environment.allowNonStatic = temp;
         }
-        for (Environment e : environments) {
-            LookupResult r = e.lookup(name);
-            if (r != null) {
-                return r;
-            }
+        Environment.allowProtected = false;
+        r = singleImportEnvironment.lookup(name);
+        if (r != null) {
+            return r;
         }
+        Environment.allowNonStatic = temp;
+        Environment.allowProtected = true;
+        r = packageEnvironment.lookup(name);
+        if (r != null) {
+            return r;
+        }
+        Environment.allowNonStatic = temp;
+        Environment.allowProtected = false;
+        r = multiImportEnvironment.lookup(name);
+        if (r != null) {
+            return r;
+        }
+        Environment.allowNonStatic = temp;
+        r = baseEnvironment.lookup(name);
+        if (r != null) {
+            return r;
+        }
+
+        Environment.allowNonStatic = temp;
+        Environment.allowProtected = temp2;
         return null;
+    }
+
+    public void setBaseEnvironment(Environment baseEnvironment) {
+        this.baseEnvironment = baseEnvironment;
+    }
+
+    public void setMultiImportEnvironment(Environment multiImportEnvironment) {
+        this.multiImportEnvironment = multiImportEnvironment;
+    }
+
+    public void setPackageEnvironment(Environment packageEnvironment) {
+        this.packageEnvironment = packageEnvironment;
+    }
+
+    public void setSingleImportEnvironment(Environment singleImportEnvironment) {
+        this.singleImportEnvironment = singleImportEnvironment;
     }
 }

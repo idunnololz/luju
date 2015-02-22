@@ -56,6 +56,59 @@ public class NameResolver {
     private boolean checkingFields = false;
     private Method curMethod;
     private Field curField;
+    private AstNode lastNode;
+
+    private Environment.WarningResolver warningResolver = new Environment.WarningResolver() {
+        @Override
+        public void resolveWarning(int type, Object extra) {
+            switch (type) {
+                case Environment.WARNING_SUSPICIOUS_PROTECTED_ACCESS_FIELD: {
+                    Field f = (Field) extra;
+                    Class dc = f.getDeclaringClass();
+                    if (!curClass.isSubClassOf(dc) && !dc.getPackage().equals(curClass.getPackage())) {
+                        throw new TypeException(curClass.getFileName(), lastNode,
+                                String.format("'%s' has protected access in '%s'",
+                                        f.getName(), f.getDeclaringClass()));
+                    }
+                    break;
+                }
+                case Environment.WARNING_SUSPICIOUS_PROTECTED_ACCESS_METHOD: {
+                    Method m = (Method) extra;
+                    if (!curClass.isSubClassOf(m.getDeclaringClass())) {
+                        throw new TypeException(curClass.getFileName(), lastNode,
+                                String.format("'%s' has protected access in '%s'",
+                                        m.getName(), m.getDeclaringClass()));
+                    }
+                    break;
+                }
+                case Environment.WARNING_ENSURE_SAME_PACKAGE_OR_SUBCLASS_FIELD: {
+                    Field f = (Field) extra;
+                    Class dc = f.getDeclaringClass();
+                    if (!dc.getPackage().equals(curClass.getPackage())) {
+                        throw new TypeException(curClass.getFileName(), lastNode,
+                                String.format("'%s' has protected access in '%s'",
+                                        f.getName(), f.getDeclaringClass()));
+                    }
+                    break;
+                }
+                case Environment.WARNING_ENSURE_SAME_PACKAGE_OR_SUBCLASS_METHOD: {
+                    Method m = (Method) extra;
+                    Class dc = m.getDeclaringClass();
+                    if (!dc.getPackage().equals(curClass.getPackage())) {
+                        throw new TypeException(curClass.getFileName(), lastNode,
+                                String.format("'%s' has protected access in '%s'",
+                                        m.getName(), m.getDeclaringClass()));
+                    }
+                    break;
+                }
+            }
+        }
+
+        @Override
+        public Class getCurrentClass() {
+            return curClass;
+        }
+    };
 
     public void resolveNames(Ast ast) {
         baseEnvironment = new BaseEnvironment(ast);
@@ -143,6 +196,7 @@ public class NameResolver {
 
         buildHierarchyEnvironment(baseEnvironment.getAllClasses());
 
+        Environment.turnOnHints(warningResolver);
         for (Class c : classes) {
             // 13.   For each VarInitDecl:
             // 14.     Link all variables in expressions. (Ensure var is declared before it)
@@ -160,6 +214,7 @@ public class NameResolver {
                 checkingFields = true;
                 for (VarDecl vd : cDecl.getFieldDeclarations()) {
                     try {
+                        lastNode = vd;
                         Field f = env.lookupField(vd.getName());
                         if (vd instanceof VarInitDecl) {
                             if (Modifier.isStatic(vd.getModifiers())) {
@@ -184,11 +239,12 @@ public class NameResolver {
                 checkingFields = false;
 
                 // Constructors are always non-static
-                inStaticContext = false;
                 for (ConstructorDecl cd : cDecl.getConstructorDeclaration()) {
+                    inStaticContext = false;
                     Environment curEnv = env;
                     for (VarDecl vd : cd.getArguments()) {
                         try {
+                            lastNode = vd;
                             Variable v = new Variable(cd.getProper(), vd, curEnv);
                             curEnv = new LocalVariableEnvironment(v.getName(), v, curEnv);
                         } catch (EnvironmentException e) {
@@ -198,8 +254,26 @@ public class NameResolver {
 
                     Block b = cd.getBlock();
                     if (b == null) continue; // this can happen with native/abstract methods...
-                    for (Statement s : b.getStatements()) {
+
+
+                    List<Statement> statements = b.getStatements();
+
+                    Class superClass;
+                    if ((superClass = c.getSuperClass()) != null) {
+                        // in Joos all super classes must have a default constructor...
+                        String defaultConstructorSig =
+                                Constructor.getConstructorSignature(superClass.getName(), new ArrayList<Class>());
+                        if (superClass.get(defaultConstructorSig) == null) {
+                            throw new TypeException(c.getFileName(), c.getClassDecl(),
+                                    String.format(
+                                            "There is no default constructor available in '%s'",
+                                            superClass.getCanonicalName()));
+                        }
+                    }
+
+                    for (Statement s : statements) {
                         try {
+                            lastNode = s;
                             curEnv = resolveStatement(s, curEnv);
                         } catch (EnvironmentException e) {
                             throwNameResolutionException(e, c.getFileName(), s);
@@ -222,6 +296,7 @@ public class NameResolver {
                 Environment curEnv = env;
                 for (VarDecl vd : meth.getArguments()) {
                     try {
+                        lastNode = vd;
                         Variable v = new Variable(meth.getProper(), vd, curEnv);
                         curEnv = new LocalVariableEnvironment(v.getName(), v, curEnv);
                     } catch (EnvironmentException e) {
@@ -233,6 +308,7 @@ public class NameResolver {
                 if (b == null) continue; // this can happen with native/abstract methods...
                 for (Statement s : b.getStatements()) {
                     try {
+                        lastNode = s;
                         curEnv = resolveStatement(s, curEnv);
                     } catch (EnvironmentException e) {
                         throwNameResolutionException(e, c.getFileName(), s);
@@ -240,6 +316,7 @@ public class NameResolver {
                 }
             }
         }
+        Environment.turnOffHints();
     }
 
     private Environment resolveStatement(Statement s, Environment env) {
@@ -376,10 +453,10 @@ public class NameResolver {
             }
             case Expression.ASSIGN_EXPRESSION: {
                 AssignExpression assign = (AssignExpression) ex;
+                Expression lhsExpr = assign.getLhs();
                 if (checkingFields) {
-                    Expression e = assign.getLhs();
-                    if (e.getExpressionType() == Expression.VARIABLE_EXPRESSION) {
-                        VariableExpression varExpr = (VariableExpression) e;
+                    if (lhsExpr.getExpressionType() == Expression.VARIABLE_EXPRESSION) {
+                        VariableExpression varExpr = (VariableExpression) lhsExpr;
                         Field f = null;
                         if (varExpr instanceof FieldVariable) {
                             FieldVariable fVar = (FieldVariable) varExpr;
@@ -394,7 +471,29 @@ public class NameResolver {
                         }
                     }
                 }
-                Class lhsType = resolveExpression(assign.getLhs(), env);
+
+                switch (lhsExpr.getExpressionType()) {
+                    case Expression.VARIABLE_EXPRESSION: {
+                        boolean c = checkingFields;
+                        checkingFields = false;
+                        Field f = getFieldFromVariableExpression((VariableExpression) lhsExpr, env);
+                        if (Modifier.isFinal(f.getModifiers())) {
+                            throw new TypeException(curClass.getFileName(), lhsExpr,
+                                    String.format(
+                                            "Cannot assign a value to final variable '%s'",
+                                            f.getName()));
+                        }
+                        checkingFields = c;
+                        break;
+                    }
+                    case Expression.ARRAY_ACCESS_EXPRESSION:
+                        // TODO
+                        break;
+                    default:
+                        throw new RuntimeException("wtf...did not see dis coming...");
+                }
+
+                Class lhsType = resolveExpression(lhsExpr, env);
                 Class rhsType = resolveExpression(assign.getRhs(), env);
                 if (!Class.isValidAssign(lhsType, rhsType)) {
                     throw new IncompatibleTypeException(curClass.getFileName(), ex,
@@ -433,9 +532,16 @@ public class NameResolver {
                         return BaseEnvironment.TYPE_BOOLEAN;
                     case EQ_EQ:
                     case NEQ:
+                        if (!Class.isValidAssign(l, r) && !Class.isValidAssign(r, l)) {
+                            throw new TypeException(curClass.getFileName(), ex,
+                                    String.format("Invalid comparison made between type '%s' and '%s'",
+                                            l.getCanonicalName(),
+                                            r.getCanonicalName()));
+                        }
                         return BaseEnvironment.TYPE_BOOLEAN;
                     case PLUS:
-                        if (l == BaseEnvironment.TYPE_STRING || r == BaseEnvironment.TYPE_STRING)
+                        if ((l == BaseEnvironment.TYPE_STRING || r == BaseEnvironment.TYPE_STRING) &&
+                                (l != BaseEnvironment.TYPE_VOID && r != BaseEnvironment.TYPE_VOID))
                             return BaseEnvironment.TYPE_STRING;
                         if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
                             throw new TypeException(curClass.getFileName(), ex,
@@ -471,17 +577,25 @@ public class NameResolver {
             case Expression.ICREATION_EXPRESSION: {
                 ICreationExpression instanceCreation = (ICreationExpression) ex;
                 Class type = resolveExpression(instanceCreation.getType(), env);
+
+                if (Modifier.isAbstract(type.getModifiers())) {
+                    throw new TypeException(curClass.getFileName(), instanceCreation,
+                            String.format("'%s' is abstract; cannot be instantiated",
+                                    type.getName()));
+                }
+
                 List<Class> argTypes = new ArrayList<>();
                 for (Expression expr : instanceCreation.getArgList()) {
                     argTypes.add(resolveExpression(expr, env));
                 }
                 String constructorSig = Constructor.getConstructorSignature(type.getName(), argTypes);
-                Object o = type.get(constructorSig);
-                if (o == null) {
+                Constructor c = (Constructor) type.get(constructorSig);
+                if (c == null) {
                     throw new NameResolutionException(curClass.getFileName(), instanceCreation,
                             String.format("No constructor found in '%s' that matches '%s'", type.getName(),
                                     constructorSig));
                 }
+                ensureCorrectAccess(c);
                 inStaticContext = false;
                 return type;
             }
@@ -493,18 +607,81 @@ public class NameResolver {
             }
             case Expression.METHOD_EXPRESSION: {
                 MethodExpression meth = (MethodExpression) ex;
-                String methodName = null;
                 Expression e = meth.getPrefixExpression();
                 List<Class> argTypes = new ArrayList<>();
+                boolean b = inStaticContext;
                 for (Expression expr : meth.getArgList()) {
                    argTypes.add(resolveExpression(expr, env));
+                   inStaticContext = b;
                 }
                 String methSig = Method.getMethodSignature(meth.getMethodName(), argTypes);
                 Method m;
+
                 if (e != null) {
-                    m = resolveExpression(e, env).getEnvironment().lookupMethod(methSig);
+                    Class type;
+                    boolean methodAccessFromVariable = true;
+                    boolean staticContext = false;
+                    if (e.getExpressionType() == Expression.TYPE_OR_VARIABLE_EXPRESSION) {
+                        Object o = getFieldOrType((TypeOrVariableExpression) e, env);
+                        if (o instanceof Class) {
+                            type = (Class) o;
+                            methodAccessFromVariable = false;
+                            staticContext = true;
+                        } else {
+                            type = ((Field)o).getType();
+                        }
+                    } else {
+                        type = resolveExpression(e, env);
+                    }
+
+                    m = type.getEnvironment().lookupMethod(methSig);
+                    if (Modifier.isProtected(m.getModifiers()) && !curClass.isSubClassOf(m.getDeclaringClass())) {
+                        throw new TypeException(curClass.getFileName(), lastNode,
+                                String.format("'%s' has protected access in '%s'",
+                                        m.getName(), m.getDeclaringClass()));
+                    } else if (Modifier.isProtected(m.getModifiers()) && methodAccessFromVariable && !type.isSubClassOf(curClass)
+                            && !type.getPackage().equals(curClass.getPackage())) {
+                        throw new TypeException(curClass.getFileName(), lastNode,
+                                String.format("'%s' has protected access in '%s'",
+                                        m.getName(), m.getDeclaringClass()));
+                    }
+
+                    if (staticContext) {
+                        if (!Modifier.isStatic(m.getModifiers())) {
+                            throw new EnvironmentException("Non static method referenced from static context",
+                                    EnvironmentException.ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT,
+                                    m);
+                        }
+                    } else {
+                        if (Modifier.isStatic(m.getModifiers())) {
+                            throw new EnvironmentException("Static method referenced from non static context",
+                                    EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
+                                    m);
+                        }
+                    }
                 } else {
                     m = env.lookupMethod(methSig);
+
+                    if (inStaticContext) {
+
+                        if (!Modifier.isStatic(m.getModifiers())) {
+                            throw new EnvironmentException("Static method referenced from non static context",
+                                    EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
+                                    m);
+                        }
+                    }
+                    if (Modifier.isStatic(m.getModifiers())) {
+                        throw new TypeException(curClass.getFileName(), meth,
+                                String.format("Static method '%s' cannot be referenced from non-static context",
+                                        m.getName()));
+                    }
+                }
+                if (!inStaticContext) {
+                    if (Modifier.isStatic(m.getModifiers())) {
+                        throw new EnvironmentException("Static method referenced from non static context",
+                                EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
+                                m);
+                    }
                 }
                 return m.getReturnType();
             }
@@ -515,6 +692,11 @@ public class NameResolver {
                 return type;
             }
             case Expression.THIS_EXPRESSION: {
+                if (inStaticContext) {
+                    throw new TypeException(curClass.getFileName(), ex,
+                            String.format("'%s' cannot be referenced from a static context",
+                                    curClass.getCanonicalName() + ".this"));
+                }
                 return curClass;
             }
             case Expression.UNARY_EXPRESSION: {
@@ -537,7 +719,7 @@ public class NameResolver {
                         }
                         return BaseEnvironment.TYPE_BOOLEAN;
                     case MINUS:
-                        if (k != BaseEnvironment.TYPE_INT) {
+                        if (Class.getCategory(k) != Class.CATEGORY_NUMBER) {
                             throw new TypeException(curClass.getFileName(), unary,
                                     String.format("Operator '-' cannot be applied to '%s'", k.getName()));
                         }
@@ -550,73 +732,85 @@ public class NameResolver {
             }
             case Expression.VARIABLE_EXPRESSION: {
                 VariableExpression varExpr = (VariableExpression) ex;
-                String varName = null;
-                Field f = null;
-                if (varExpr instanceof FieldVariable) {
-                    FieldVariable fVar = (FieldVariable) varExpr;
-                    Class c = resolveExpression(fVar.getPrefixExpr(), env);
-                    if (inStaticContext) {
-                        Environment.setStaticMode(true);
-                    }
-                    f = c.getEnvironment().lookupField(fVar.getFieldName());
-                    if (inStaticContext) {
-                        Environment.setStaticMode(false);
-                    }
-                } else if (varExpr instanceof NameVariable) {
-                    NameVariable nVar = (NameVariable) varExpr;
-                    varName = nVar.getName();
-                    if (checkingFields) {
-                        LookupResult r = env.lookupName(new String[]{nVar.getId().getRaw()});
-                        if (r != null && r.result instanceof Field) {
-                            Field field = (Field) r.result;
-                            ensureValidReference(curField, field);
-                        }
-                    }
-
-                    if (inStaticContext) {
-                        Environment.setStaticMode(true);
-                    }
-                    f = env.lookupField(varName);
-                    if (inStaticContext) {
-                        Environment.setStaticMode(false);
-                    }
+                Field f;
+                if (inStaticContext) {
+                    f = getFieldFromVariableExpression(varExpr, env);
+                } else {
+                    Environment.setNoStaticMode(true);
+                    f = getFieldFromVariableExpression(varExpr, env);
+                    Environment.setNoStaticMode(false);
                 }
                 return f.getType();
-            }
-            case Expression.TYPE_OR_VARIABLE_EXPRESSION: {
-                TypeOrVariableExpression typeOrVar = (TypeOrVariableExpression) ex;
-                String[] arr = typeOrVar.getTypeAsArray();
-                LookupResult result = env.lookupName(arr);
-                if (result == null || result.tokensConsumed != arr.length) {
-                    String fullName = typeOrVar.toString();
-                    throw new EnvironmentException("", EnvironmentException.ERROR_NOT_FOUND,
-                            fullName);
-                }
-                Object res = result.result;
-                if (res instanceof Field) {
-                    inStaticContext = false;
-                    Field f = (Field) res;
-                    if (checkingFields) {
-                        LookupResult r = env.lookupName(new String[]{arr[0]});
-                        if (r != null && r.result instanceof Field) {
-                            Field field = (Field) r.result;
-                            ensureValidReference(curField, field);
-                        }
-                    }
-                    return f.getType();
-                } else if (res instanceof Class) {
-                    return (Class) res;
-                } else {
-                    String fullName = typeOrVar.toString();
-                    throw new EnvironmentException("", EnvironmentException.ERROR_NOT_FOUND,
-                            fullName);
-                }
             }
             default:
                 throw new RuntimeException(
                         String.format("Error. Name resolver does not support the expression type '%s'",
                                 ex.getClass().getSimpleName()));
         }
+    }
+
+    private Object getFieldOrType(TypeOrVariableExpression typeOrVar, Environment env) {
+        String[] arr = typeOrVar.getTypeAsArray();
+        LookupResult result = env.lookupName(arr);
+        if (result == null || result.tokensConsumed != arr.length) {
+            String fullName = typeOrVar.toString();
+            throw new EnvironmentException("", EnvironmentException.ERROR_NOT_FOUND,
+                    fullName);
+        }
+        Object res = result.result;
+        if (res instanceof Field) {
+            inStaticContext = false;
+            Field f = (Field) res;
+            if (checkingFields) {
+                LookupResult r = env.lookupName(new String[]{arr[0]});
+                if (r != null && r.result instanceof Field) {
+                    Field field = (Field) r.result;
+                    ensureValidReference(curField, field);
+                }
+            }
+            return f;
+        } else if (res instanceof Class) {
+            inStaticContext = true;
+            return (Class) res;
+        } else {
+            String fullName = typeOrVar.toString();
+            throw new EnvironmentException("", EnvironmentException.ERROR_NOT_FOUND,
+                    fullName);
+        }
+    }
+
+    private Field getFieldFromVariableExpression(VariableExpression varExpr, Environment env) {
+        Field f = null;
+        if (varExpr instanceof FieldVariable) {
+            FieldVariable fVar = (FieldVariable) varExpr;
+            Class c = resolveExpression(fVar.getPrefixExpr(), env);
+            if (inStaticContext) {
+                Environment.setStaticMode(true);
+            }
+            f = c.getEnvironment().lookupField(fVar.getFieldName());
+            if (inStaticContext) {
+                Environment.setStaticMode(false);
+            }
+        } else if (varExpr instanceof NameVariable) {
+            NameVariable nVar = (NameVariable) varExpr;
+            String varName = nVar.getName();
+            if (checkingFields) {
+                LookupResult r = env.lookupName(new String[]{nVar.getId().getRaw()});
+                if (r != null && r.result instanceof Field) {
+                    Field field = (Field) r.result;
+                    ensureValidReference(curField, field);
+                }
+            }
+
+            if (inStaticContext) {
+                Environment.setStaticMode(true);
+                f = env.lookupField(varName);
+                Environment.setStaticMode(false);
+            } else {
+                f = env.lookupField(varName);
+            }
+        }
+        return f;
     }
 
     private void ensureValidReference(Field curField, Field f) {
@@ -643,7 +837,7 @@ public class NameResolver {
         // everything in the class's package
         // import on demand
         CompositeEnvironment env = new CompositeEnvironment();
-        env.addEnvironment(baseEnvironment);
+        env.setBaseEnvironment(baseEnvironment);
         MapEnvironment singleImportEnv = new MapEnvironment();
         MapEnvironment multiImportEnv = new MapEnvironment();
         MapEnvironment packageEnv = new MapEnvironment();
@@ -690,9 +884,9 @@ public class NameResolver {
             packageEnv.put(clazz.getName(), clazz);
         }
 
-        env.addEnvironment(multiImportEnv);
-        env.addEnvironment(packageEnv);
-        env.addEnvironment(singleImportEnv);
+        env.setMultiImportEnvironment(multiImportEnv);
+        env.setPackageEnvironment(packageEnv);
+        env.setSingleImportEnvironment(singleImportEnv);
 
         fn.setEnv(env);
 
@@ -910,6 +1104,15 @@ public class NameResolver {
         }
     }
 
+    private void ensureCorrectAccess(Constructor c) {
+        if (!Modifier.isProtected(c.getModifiers())) return;
+        if (!curClass.getPackage().equals(c.getDeclaringClass().getPackage())) {
+            throw new TypeException(curClass.getFileName(), lastNode,
+                    String.format("'%s' has protected access in '%s'",
+                            c.getName(), c.getDeclaringClass()));
+        }
+    }
+
     private void throwNameResolutionException(EnvironmentException e, String fileName, AstNode pos) {
         switch (e.getType()) {
             case EnvironmentException.ERROR_NOT_FOUND:
@@ -925,16 +1128,30 @@ public class NameResolver {
                 throw new NameResolutionException(fileName, pos,
                         String.format("Variable '%s' is already defined in the scope",
                                 e.getExtra().toString()), e);
-            case EnvironmentException.ERROR_NON_STATIC_FIELD_FROM_STATIC_CONTEXT:
+            case EnvironmentException.ERROR_NON_STATIC_FIELD_FROM_STATIC_CONTEXT: {
                 Field f = (Field) e.getExtra();
                 throw new TypeException(fileName, pos,
                         String.format("Non-static field '%s' cannot be referenced from static context",
                                 f.getName()), e);
-            case EnvironmentException.ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT:
+            }
+            case EnvironmentException.ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT: {
                 Method m = (Method) e.getExtra();
                 throw new TypeException(fileName, pos,
                         String.format("Non-static method '%s' cannot be referenced from static context",
                                 m.getName()), e);
+            }
+            case EnvironmentException.ERROR_STATIC_FIELD_FROM_NON_STATIC_CONTEXT: {
+                Field f = (Field) e.getExtra();
+                throw new TypeException(fileName, pos,
+                        String.format("Static field '%s' cannot be referenced from non-static context",
+                                f.getName()), e);
+            }
+            case EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT: {
+                Method m = (Method) e.getExtra();
+                throw new TypeException(fileName, pos,
+                        String.format("Static method '%s' cannot be referenced from non-static context",
+                                m.getName()), e);
+            }
         }
     }
 }

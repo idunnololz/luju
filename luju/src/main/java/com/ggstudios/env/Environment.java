@@ -6,9 +6,56 @@ import com.ggstudios.types.ReferenceType;
 public abstract class Environment {
     protected static boolean inStaticMode = false;
     protected static boolean allowNonStatic = true;
+    protected static boolean noStaticMode = false;
+    protected static boolean allowProtected = true;
+    protected static WarningResolver resolver;
+
+    public static final int WARNING_SUSPICIOUS_PROTECTED_ACCESS_FIELD = 1;
+    public static final int WARNING_SUSPICIOUS_PROTECTED_ACCESS_METHOD = 2;
+
+    public static final int WARNING_ENSURE_SAME_PACKAGE_OR_SUBCLASS_FIELD = 3;
+    public static final int WARNING_ENSURE_SAME_PACKAGE_OR_SUBCLASS_METHOD = 4;
+
+    public Environment() {
+        allowProtected = true;
+    }
+
+    /**
+     * Under certain conditions, the environment can spot interesting referencing and send an alert
+     * to help catch errors. This allows for a much more performant error detection system.
+     * @param resolver
+     */
+    public static void turnOnHints(WarningResolver resolver) {
+        Environment.resolver = resolver;
+    }
+
+    public static void turnOffHints() {
+        Environment.resolver = null;
+    }
+
+    protected static void warn(int warning, Object extra) {
+        if (Environment.resolver != null) {
+            Environment.resolver.resolveWarning(warning, extra);
+        }
+    }
+
+    protected static Class getCurrentClass() {
+        if (Environment.resolver != null) {
+            return Environment.resolver.getCurrentClass();
+        }
+        return null;
+    }
 
     public static void setStaticMode(boolean mode) {
         inStaticMode = mode;
+    }
+
+    public static void setNoStaticMode(boolean noStaticMode) {
+        Environment.noStaticMode = noStaticMode;
+    }
+
+    public static boolean isNoStaticMode() {
+        return noStaticMode;
     }
 
     public abstract LookupResult lookup(String[] name);
@@ -36,7 +83,6 @@ public abstract class Environment {
 
         LookupResult r;
         if (thisComp != null) {
-            // TODO implement this better...
             r = thisComp.lookupName(name, true);
         } else {
             r = lookup(name);
@@ -106,5 +152,10 @@ public abstract class Environment {
                     fullName);
         }
         return (Constructor) r.result;
+    }
+
+    public static interface WarningResolver {
+        public void resolveWarning(int type, Object extra);
+        public Class getCurrentClass();
     }
 }

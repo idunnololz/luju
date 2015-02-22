@@ -95,7 +95,7 @@ public class LuJuCompiler {
             return processError(RETURN_CODE_ERROR);
         } catch (TypeException e) {
             AstNode n = e.getNode();
-            Print.e(String.format("LuJu: %s: %s(%d, %d): %s", e.getFile(), e.getClass().getSimpleName(), n.getRow(), n.getCol(), e.getMessage()));
+            Print.e(String.format("LuJu: %s: %s[%s](%d, %d): %s", e.getFile(), e.getClass().getSimpleName(), n.getClass().getSimpleName(), n.getRow(), n.getCol(), e.getMessage()));
             return processError(RETURN_CODE_ERROR);
         }
 
