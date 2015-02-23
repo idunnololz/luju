@@ -203,7 +203,6 @@ public class Parser {
 
                         // ensure no duplicate mods...
                         Set<Token.Type> set = ensureNoDuplicate(toks);
-                        boolean isAbstract = set.contains(Token.Type.ABSTRACT);
                         boolean isNative = set.contains(Token.Type.NATIVE);
                         boolean isStatic = set.contains(Token.Type.STATIC);
                         boolean isFinal = set.contains(Token.Type.FINAL);

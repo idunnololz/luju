@@ -235,6 +235,7 @@ public class Tokenizer {
                     toks.add(new Token(Token.Type.NOT, "!", col, row));
                 }
             } else if (Character.isWhitespace(c)) {
+                // do nothing...
             } else {
                 throw new TokenException(fileName, new Token(Token.Type.INVALID, Character.toString(c), col, row),
                         "Invalid token '" + c + "'");

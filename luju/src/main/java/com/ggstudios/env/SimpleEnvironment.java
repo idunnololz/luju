@@ -74,7 +74,7 @@ public abstract class SimpleEnvironment extends Environment {
             return ((Environment) o).lookup(name);
         } else if (o == null) {
             if (typeFound) {
-                return new LookupResult(o, i - 1);
+                return new LookupResult(null, i - 1);
             }
             return null;
         }

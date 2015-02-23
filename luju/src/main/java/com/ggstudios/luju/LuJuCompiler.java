@@ -137,7 +137,7 @@ public class LuJuCompiler {
 
         @Override
         public void run() {
-            FileNode fn = null;
+            FileNode fn;
             try {
                 fn = generateFileNode(args, fileName);
 
@@ -159,7 +159,7 @@ public class LuJuCompiler {
 
         private FileNode generateFileNode(Main.ArgList args, String fileName) {
             FileNode fn = new FileNode();
-            List<Token> tokens = null;
+            List<Token> tokens;
             try {
                 tokens = tokenizer.tokenizeWith(fileName);
 

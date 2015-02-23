@@ -18,7 +18,6 @@ public class ParseTable {
     private static final int ACTION_ID_MASK = 0x0000FFFF;
 
     private int startState;
-    private int states;
 
     private List<LrProduction> ruleMap = new ArrayList<>();
 
@@ -85,7 +84,7 @@ public class ParseTable {
                 ruleMap.add(new LrProduction(symbolNameToId.get(toks[0]), rhs));
             }
 
-            states = Integer.valueOf(reader.readLine());
+            reader.readLine();
 
             int actGotoCount = Integer.valueOf(reader.readLine());
             for (int i = 0; i < actGotoCount; i++) {

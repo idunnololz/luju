@@ -25,10 +25,6 @@ public class BaseEnvironment extends MapEnvironment {
 
     private List<Class> allClasses = new ArrayList<>();
 
-    private static final String[] PRIMITIVE_TYPES = {
-        "int", "boolean", "short", "char", "void", "byte"
-    };
-
     public static final Class TYPE_INT = new PrimitiveClass("int", true);
     public static final Class TYPE_BOOLEAN = new PrimitiveClass("boolean", true);
     public static final Class TYPE_SHORT = new PrimitiveClass("short", true);

@@ -38,4 +38,8 @@ public class Literal extends Field {
         }
     }
 
+    public Object getValue() {
+        return value;
+    }
+
 }

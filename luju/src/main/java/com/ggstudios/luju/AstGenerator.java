@@ -290,7 +290,7 @@ public class AstGenerator {
         // fieldDeclaration -> optModifiers type variableDeclarator SEMI
         // fieldDeclaration -> optModifiers type variableDeclarator ASSIGN expression SEMI
 
-        VarDecl varDecl = null;
+        VarDecl varDecl;
 
         if (node.prod.rhs.length == 4) {
             varDecl = new VarDecl();

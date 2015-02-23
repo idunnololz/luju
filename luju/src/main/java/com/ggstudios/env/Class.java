@@ -187,11 +187,7 @@ public class Class extends HashMap<String, Object> {
             return true;
         }
 
-        if (lhs == BaseEnvironment.TYPE_VOID || lhs == BaseEnvironment.TYPE_VOID) {
-            return false;
-        }
-
-        return isSuperClassOf(lhs, rhs);
+        return !(lhs == BaseEnvironment.TYPE_VOID || lhs == BaseEnvironment.TYPE_VOID) && isSuperClassOf(lhs, rhs);
     }
 
     private static final HashMap<Class, Integer> classToCategory = new HashMap<>();

@@ -224,11 +224,8 @@ public class NameResolver {
                         lastNode = vd;
                         Field f = env.lookupField(vd.getName());
                         if (vd instanceof VarInitDecl) {
-                            if (Modifier.isStatic(vd.getModifiers())) {
-                                inStaticContext = true;
-                            } else {
-                                inStaticContext = false;
-                            }
+                            inStaticContext = Modifier.isStatic(vd.getModifiers());
+
                             curField = f;
                             VarInitDecl vid = (VarInitDecl) vd;
                             Expression expr = vid.getExpr();
@@ -290,15 +287,13 @@ public class NameResolver {
             }
 
             for (MethodDecl meth : typeDecl.getMethodDeclarations()) {
-                if (Modifier.isStatic(meth.getModifiers())) {
-                    inStaticContext = true;
-                } else {
-                    inStaticContext = false;
-                }
+                inStaticContext = Modifier.isStatic(meth.getModifiers());
+
                 if (meth.isAbstract() && isNonAbstractClass) {
                     throw new NameResolutionException(c.getFileName(), meth,
                             "Abstract method in non-abstract class");
                 }
+
                 curMethod = meth.getProper();
                 Environment curEnv = env;
                 for (VarDecl vd : meth.getArguments()) {
@@ -494,7 +489,6 @@ public class NameResolver {
                         break;
                     }
                     case Expression.ARRAY_ACCESS_EXPRESSION:
-                        // TODO
                         break;
                     default:
                         throw new RuntimeException("wtf...did not see dis coming...");
@@ -778,7 +772,7 @@ public class NameResolver {
             return f;
         } else if (res instanceof Class) {
             inStaticContext = true;
-            return (Class) res;
+            return res;
         } else {
             String fullName = typeOrVar.toString();
             throw new EnvironmentException("", EnvironmentException.ERROR_NOT_FOUND,
@@ -938,7 +932,6 @@ public class NameResolver {
         }
 
         if (classes.size() != 0) {
-            Environment env = classes.get(0).getEnvironment();
             BaseEnvironment.TYPE_OBJECT.setIsComplete(true);
         }
 
@@ -1063,50 +1056,6 @@ public class NameResolver {
                 } else {
                     c.put(entry.getKey(), entry.getValue());
                 }
-            }
-        }
-    }
-
-    private static class Kind {
-        private final boolean isType;
-        private final boolean isField;
-        public Class c;
-        public Field f;
-        public Method m;
-
-        public Kind(Class c) {
-            isType = true;
-            isField = false;
-            this.c = c;
-        }
-
-        public Kind(Field f) {
-            isType = false;
-            isField = true;
-            this.f = f;
-        }
-
-        public Kind(Method m) {
-            isType = false;
-            isField = false;
-            this.m = m;
-        }
-
-        public boolean isType() {
-            return isType;
-        }
-
-        public boolean isField() {
-            return isField;
-        }
-
-        public Class getType() {
-            if (isType) {
-                return c;
-            } else if (isField) {
-                return f.getType();
-            } else {
-                return m.getReturnType();
             }
         }
     }
