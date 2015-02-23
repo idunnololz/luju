@@ -5,7 +5,6 @@ import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.types.ClassDecl;
 import com.ggstudios.types.TypeDecl;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -14,6 +13,7 @@ import java.util.Set;
 public class Class extends HashMap<String, Object> {
     private Set<String> methodSignatures = new HashSet<>();
 
+    private Package thisPackage;
     private int modifiers;
     private TypeDecl classDecl;
     private String canonicalName;
@@ -42,6 +42,10 @@ public class Class extends HashMap<String, Object> {
         arrayClass.resolveSelf(arrayClass.getEnvironment());
     }
 
+    protected void setPackage(Package p) {
+        thisPackage = p;
+    }
+
     public Class getArrayClass() {
         return arrayClass;
     }
@@ -58,8 +62,8 @@ public class Class extends HashMap<String, Object> {
         return false;
     }
 
-    public String getPackage() {
-        return classDecl.getPackage();
+    public Package getPackage() {
+        return thisPackage;
     }
 
     public String getDeclType() {

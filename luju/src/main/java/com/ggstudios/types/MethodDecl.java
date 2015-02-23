@@ -6,9 +6,7 @@ import com.ggstudios.luju.Token;
 import com.ggstudios.utils.PrintUtils;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class MethodDecl extends AstNode {
     private int modifiers = 0;

@@ -1,6 +1,5 @@
 package com.ggstudios.error;
 
-import com.ggstudios.luju.Token;
 import com.ggstudios.types.AstNode;
 
 import java.io.File;

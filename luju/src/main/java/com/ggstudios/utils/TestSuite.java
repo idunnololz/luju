@@ -5,11 +5,7 @@ import com.ggstudios.luju.Main;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Stack;
 
 public class TestSuite {
     private LuJuCompiler compiler;

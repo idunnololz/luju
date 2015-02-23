@@ -1,7 +1,5 @@
 package com.ggstudios.types;
 
-import com.ggstudios.luju.Token;
-
 import java.util.List;
 
 public class MethodExpression extends Expression {

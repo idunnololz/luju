@@ -28,31 +28,10 @@ public abstract class SimpleEnvironment extends Environment {
                     warn(WARNING_SUSPICIOUS_PROTECTED_ACCESS_FIELD, f);
                 }
             }
-        } else if (o instanceof Method) {
-            Method m = (Method) o;
-            if (!Environment.allowNonStatic && !Modifier.isStatic(m.getModifiers())) {
-                throw new EnvironmentException("Non static method referenced from static context",
-                        EnvironmentException.ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT,
-                        m);
-            } else if (Environment.allowNonStatic && Environment.noStaticMode && Modifier.isStatic(m.getModifiers())) {
-                throw new EnvironmentException("Static method referenced from non static context",
-                        EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
-                        m);
-            }
-
-            if (Modifier.isProtected(m.getModifiers())) {
-                if (needToEnsureSamePackage) {
-                    warn(WARNING_ENSURE_SAME_PACKAGE_OR_SUBCLASS_METHOD, m);
-                } else if (!Environment.allowProtected) {
-                    warn(WARNING_SUSPICIOUS_PROTECTED_ACCESS_METHOD, m);
-                }
-            }
-
-            if (!Environment.allowProtected && Modifier.isProtected(m.getModifiers())) {
-            }
         }
+        // method modifier checks are done in NameResolver since multiple methods cannot be packed
+        // into the same expression
     }
-
 
     public LookupResult lookup(String[] name) {
         if (name.length == 0) return null;

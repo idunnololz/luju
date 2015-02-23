@@ -44,8 +44,8 @@ public class PrimitiveClass extends Class {
     }
 
     @Override
-    public String getPackage() {
-        return "";
+    public Package getPackage() {
+        return BaseEnvironment.PRIMITIVE_PACKAGE;
     }
 
     @Override

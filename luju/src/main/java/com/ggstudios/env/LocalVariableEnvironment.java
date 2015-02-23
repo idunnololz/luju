@@ -1,9 +1,6 @@
 package com.ggstudios.env;
 
 import com.ggstudios.error.EnvironmentException;
-import com.ggstudios.utils.Print;
-
-import java.util.Map;
 
 public class LocalVariableEnvironment extends SimpleEnvironment {
     private String key;

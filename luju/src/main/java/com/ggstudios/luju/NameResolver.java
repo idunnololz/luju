@@ -1,11 +1,21 @@
 package com.ggstudios.luju;
 
-import com.ggstudios.env.*;
+import com.ggstudios.env.BaseEnvironment;
 import com.ggstudios.env.Class;
+import com.ggstudios.env.ClassEnvironment;
+import com.ggstudios.env.CompositeEnvironment;
 import com.ggstudios.env.Constructor;
+import com.ggstudios.env.Environment;
+import com.ggstudios.env.ErrorClass;
 import com.ggstudios.env.Field;
+import com.ggstudios.env.Interface;
+import com.ggstudios.env.Literal;
+import com.ggstudios.env.LocalVariableEnvironment;
+import com.ggstudios.env.LookupResult;
+import com.ggstudios.env.MapEnvironment;
 import com.ggstudios.env.Method;
 import com.ggstudios.env.Modifier;
+import com.ggstudios.env.Variable;
 import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.error.IncompatibleTypeException;
 import com.ggstudios.error.InconvertibleTypeException;
@@ -65,7 +75,7 @@ public class NameResolver {
                 case Environment.WARNING_SUSPICIOUS_PROTECTED_ACCESS_FIELD: {
                     Field f = (Field) extra;
                     Class dc = f.getDeclaringClass();
-                    if (!curClass.isSubClassOf(dc) && !dc.getPackage().equals(curClass.getPackage())) {
+                    if (!curClass.isSubClassOf(dc) && dc.getPackage() != curClass.getPackage()) {
                         throw new TypeException(curClass.getFileName(), lastNode,
                                 String.format("'%s' has protected access in '%s'",
                                         f.getName(), f.getDeclaringClass()));
@@ -84,7 +94,7 @@ public class NameResolver {
                 case Environment.WARNING_ENSURE_SAME_PACKAGE_OR_SUBCLASS_FIELD: {
                     Field f = (Field) extra;
                     Class dc = f.getDeclaringClass();
-                    if (!dc.getPackage().equals(curClass.getPackage())) {
+                    if (dc.getPackage() != curClass.getPackage()) {
                         throw new TypeException(curClass.getFileName(), lastNode,
                                 String.format("'%s' has protected access in '%s'",
                                         f.getName(), f.getDeclaringClass()));
@@ -94,7 +104,7 @@ public class NameResolver {
                 case Environment.WARNING_ENSURE_SAME_PACKAGE_OR_SUBCLASS_METHOD: {
                     Method m = (Method) extra;
                     Class dc = m.getDeclaringClass();
-                    if (!dc.getPackage().equals(curClass.getPackage())) {
+                    if (dc.getPackage() != curClass.getPackage()) {
                         throw new TypeException(curClass.getFileName(), lastNode,
                                 String.format("'%s' has protected access in '%s'",
                                         m.getName(), m.getDeclaringClass()));
@@ -156,7 +166,6 @@ public class NameResolver {
         // check for cyclic class extends...
         List<Class> classes = baseEnvironment.getAllClasses();
         List<Interface> interfaces = new ArrayList<>();
-        List<Class> realClasses = new ArrayList<>();
         Map<Class, Integer> interfaceToIndex = new HashMap<>();
 
         Class p1, p2;
@@ -165,8 +174,6 @@ public class NameResolver {
                 interfaceToIndex.put(c, interfaces.size());
                 interfaces.add((Interface) c);
                 continue;
-            } else {
-                realClasses.add(c);
             }
 
             p1 = c.getSuperClass();
@@ -640,7 +647,7 @@ public class NameResolver {
                                 String.format("'%s' has protected access in '%s'",
                                         m.getName(), m.getDeclaringClass()));
                     } else if (Modifier.isProtected(m.getModifiers()) && methodAccessFromVariable && !type.isSubClassOf(curClass)
-                            && !type.getPackage().equals(curClass.getPackage())) {
+                            && type.getPackage() != curClass.getPackage()) {
                         throw new TypeException(curClass.getFileName(), lastNode,
                                 String.format("'%s' has protected access in '%s'",
                                         m.getName(), m.getDeclaringClass()));
@@ -1106,7 +1113,7 @@ public class NameResolver {
 
     private void ensureCorrectAccess(Constructor c) {
         if (!Modifier.isProtected(c.getModifiers())) return;
-        if (!curClass.getPackage().equals(c.getDeclaringClass().getPackage())) {
+        if (curClass.getPackage() != c.getDeclaringClass().getPackage()) {
             throw new TypeException(curClass.getFileName(), lastNode,
                     String.format("'%s' has protected access in '%s'",
                             c.getName(), c.getDeclaringClass()));

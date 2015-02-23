@@ -42,7 +42,7 @@ public class ArrayClass extends Class {
     }
 
     @Override
-    public String getPackage() {
+    public Package getPackage() {
         return baseClass.getPackage();
     }
 

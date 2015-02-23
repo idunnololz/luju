@@ -1,7 +1,5 @@
 package com.ggstudios.types;
 
-import com.ggstudios.utils.PrintUtils;
-
 public class VarInitDecl extends VarDecl {
     private Expression expr;
 

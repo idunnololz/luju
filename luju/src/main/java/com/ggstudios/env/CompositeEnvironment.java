@@ -1,8 +1,5 @@
 package com.ggstudios.env;
 
-import java.util.Deque;
-import java.util.LinkedList;
-
 /**
  * HACK: We are only using composite environment for class scope and class
  */

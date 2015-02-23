@@ -5,9 +5,6 @@ import com.ggstudios.env.Modifier;
 import com.ggstudios.luju.Token;
 import com.ggstudios.utils.PrintUtils;
 
-import java.util.HashSet;
-import java.util.Set;
-
 public class VarDecl extends Statement {
     private int modifiers = 0;
 

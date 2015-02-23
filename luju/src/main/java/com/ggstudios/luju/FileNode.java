@@ -2,7 +2,6 @@ package com.ggstudios.luju;
 
 import com.ggstudios.env.Environment;
 import com.ggstudios.types.TypeDecl;
-import com.ggstudios.utils.Print;
 import com.ggstudios.utils.PrintUtils;
 
 import java.util.ArrayList;

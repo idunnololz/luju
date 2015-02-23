@@ -42,6 +42,8 @@ public class BaseEnvironment extends MapEnvironment {
     public static Class TYPE_SERIALIZABLE;
     public static Class TYPE_CLONEABLE;
 
+    public static final Package PRIMITIVE_PACKAGE = new Package("");
+
     static {
         ((PrimitiveClass)TYPE_INT).forceReinitializeArrayClass();
     }
@@ -61,8 +63,15 @@ public class BaseEnvironment extends MapEnvironment {
                 cm = new Class(decl, fn.getFilePath());
             }
 
+            String packageName = decl.getPackage();
+            Package p = Package.getPackage(packageName);
+            if (p == null) {
+                p = new Package(packageName);
+                Package.addPackage(p);
+            }
+            cm.setPackage(p);
             allClasses.add(cm);
-            addEntry(cm.getPackage(), cm);
+            addEntry(packageName, cm);
         }
 
         TYPE_OBJECT = lookupClazz("java.lang.Object", false);
@@ -71,7 +80,6 @@ public class BaseEnvironment extends MapEnvironment {
 
         TYPE_CLONEABLE = lookupClazz("java.lang.Cloneable", false);
         TYPE_SERIALIZABLE = lookupClazz("java.io.Serializable", false);
-
 
         baseMap.put("int", TYPE_INT);
         baseMap.put("boolean", TYPE_BOOLEAN);
@@ -122,6 +130,10 @@ public class BaseEnvironment extends MapEnvironment {
                                 cMap.getDeclType(), cMap.getName()));
             }
         }
+    }
+
+    public List<Class> getAllClassesInPackage(Package p) {
+        return getAllClassesInPackage(p.getName());
     }
 
     @SuppressWarnings("unchecked")

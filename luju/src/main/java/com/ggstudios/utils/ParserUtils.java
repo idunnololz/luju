@@ -1,13 +1,10 @@
 package com.ggstudios.utils;
 
-import com.ggstudios.error.WeedException;
 import com.ggstudios.luju.Parser;
 import com.ggstudios.luju.Token;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Stack;
 
 public class ParserUtils {

@@ -1,6 +1,5 @@
 package com.ggstudios.types;
 
-import com.ggstudios.utils.Print;
 import com.ggstudios.utils.PrintUtils;
 
 public class ExpressionStatement extends Statement {
