@@ -1,5 +1,6 @@
 package com.ggstudios.luju;
 
+import com.ggstudios.error.AstException;
 import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.error.ParseException;
 import com.ggstudios.error.TokenException;
@@ -9,6 +10,7 @@ import com.ggstudios.types.AstNode;
 import com.ggstudios.utils.ExceptionUtils;
 import com.ggstudios.utils.Print;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +23,8 @@ import java.util.concurrent.Executors;
 
 public class LuJuCompiler {
     private NameResolver nameResolver = new NameResolver();
+    private CodeGenerator codeGenerator = new CodeGenerator();
+    private Assembler assembler;
 
     public static final int RETURN_CODE_SUCCESS = 0;
     public static final int RETURN_CODE_ERROR = 42;
@@ -37,11 +41,22 @@ public class LuJuCompiler {
     public LuJuCompiler(int maxThreads) {
         executor = Executors.newFixedThreadPool(maxThreads);
         workerPool = new WorkerPool(maxThreads * 2);
+
+
+        Assembler.Builder builder = new Assembler.Builder();
+        try {
+            assembler = builder.setTargetOs(Assembler.Os.WINDOWS)
+                    .setUseCygwin(true, "C:\\cygwin64\\bin\\bash.exe")
+                    .build();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void shutdown() {
         executor.shutdown();
         workerPool.ensureNoLostWorker();
+        assembler.shutdown();
     }
 
     private HashMap<String, FileNode> cachedFileNodes = new HashMap<>();
@@ -92,11 +107,13 @@ public class LuJuCompiler {
             AstNode n = e.getNode();
             Print.e(String.format("LuJu: %s: NameResolutionException(%d, %d): %s", e.getFile(), n.getRow(), n.getCol(), e.getMessage()));
             return processError(RETURN_CODE_ERROR);
-        } catch (TypeException e) {
+        } catch (AstException e) {
             AstNode n = e.getNode();
             Print.e(String.format("LuJu: %s: %s[%s](%d, %d): %s", e.getFile(), e.getClass().getSimpleName(), n.getClass().getSimpleName(), n.getRow(), n.getCol(), e.getMessage()));
             return processError(RETURN_CODE_ERROR);
         }
+
+        codeGenerator.generateCode(ast, assembler);
 
         return RETURN_CODE_SUCCESS;
     }

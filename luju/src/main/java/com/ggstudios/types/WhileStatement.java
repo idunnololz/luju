@@ -33,6 +33,9 @@ public class WhileStatement extends Statement {
         sb.append(" (");
         sb.append(condition.toString());
         sb.append(")\n");
-        body.toPrettyString(sb, level + 1);
+
+        if (body != null) {
+            body.toPrettyString(sb, level + 1);
+        }
     }
 }

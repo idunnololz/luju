@@ -8,7 +8,14 @@ public abstract class SimpleEnvironment extends Environment {
     protected abstract Object lookupNameOneStep(String name);
 
     private void staticAndProtectedCheck(Object o, boolean needToEnsureSamePackage) {
-        if (o instanceof Variable) return;
+        if (o instanceof Variable) {
+            if (!((Variable) o).isInitialized()) {
+                throw new EnvironmentException("Variable might not have been initialized",
+                        EnvironmentException.ERROR_VARIABLE_MIGHT_NOT_HAVE_BEEN_INITIALIZED,
+                        o);
+            }
+            return;
+        }
         if (o instanceof Field) {
             Field f = (Field) o;
             if (!Environment.allowNonStatic && !Modifier.isStatic(f.getModifiers())) {

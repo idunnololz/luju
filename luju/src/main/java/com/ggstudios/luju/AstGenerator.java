@@ -552,7 +552,7 @@ public class AstGenerator {
                 return getBlock(s);
             case ParseTable.NONT_EMPTYSTATEMENT:
                 // emptyStatement -> SEMI
-                return null;
+                return new ExpressionStatement(new LiteralExpression(s.children.get(0).t));
             case ParseTable.NONT_EXPRESSIONSTATEMENT:
                 // expressionStatement -> statementExpression SEMI
                 return getStatementExpression(s.children.get(0));

@@ -20,6 +20,7 @@ import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.error.IncompatibleTypeException;
 import com.ggstudios.error.InconvertibleTypeException;
 import com.ggstudios.error.NameResolutionException;
+import com.ggstudios.error.StaticAnalyzerException;
 import com.ggstudios.error.TypeException;
 import com.ggstudios.types.ArrayAccessExpression;
 import com.ggstudios.types.ArrayCreationExpression;
@@ -60,6 +61,7 @@ import java.util.Stack;
 
 public class NameResolver {
     private BaseEnvironment baseEnvironment;
+    private StaticAnalyzer staticAnalyzer;
 
     private Class curClass;
     private boolean inStaticContext = false;
@@ -122,6 +124,7 @@ public class NameResolver {
 
     public void resolveNames(Ast ast) {
         baseEnvironment = new BaseEnvironment(ast);
+        staticAnalyzer = new StaticAnalyzer();
 
         forgiveForwardUsage = false;
         inStaticContext = false;
@@ -244,12 +247,14 @@ public class NameResolver {
 
                 // Constructors are always non-static
                 for (ConstructorDecl cd : cDecl.getConstructorDeclaration()) {
+                    staticAnalyzer.resetState();
                     inStaticContext = false;
                     Environment curEnv = env;
                     for (VarDecl vd : cd.getArguments()) {
                         try {
                             lastNode = vd;
                             Variable v = new Variable(cd.getProper(), vd, curEnv);
+                            v.setInitialized(true);
                             curEnv = new LocalVariableEnvironment(v.getName(), v, curEnv);
                         } catch (EnvironmentException e) {
                             throwNameResolutionException(e, c.getFileName(), vd);
@@ -281,12 +286,16 @@ public class NameResolver {
                             curEnv = resolveStatement(s, curEnv);
                         } catch (EnvironmentException e) {
                             throwNameResolutionException(e, c.getFileName(), s);
+                        } catch (StaticAnalyzerException e) {
+                            e.setFileName(curClass.getFileName());
+                            throw e;
                         }
                     }
                 }
             }
 
             for (MethodDecl meth : typeDecl.getMethodDeclarations()) {
+                staticAnalyzer.resetState();
                 inStaticContext = Modifier.isStatic(meth.getModifiers());
 
                 if (meth.isAbstract() && isNonAbstractClass) {
@@ -300,6 +309,7 @@ public class NameResolver {
                     try {
                         lastNode = vd;
                         Variable v = new Variable(meth.getProper(), vd, curEnv);
+                        v.setInitialized(true);
                         curEnv = new LocalVariableEnvironment(v.getName(), v, curEnv);
                     } catch (EnvironmentException e) {
                         throwNameResolutionException(e, c.getFileName(), vd);
@@ -314,17 +324,33 @@ public class NameResolver {
                         curEnv = resolveStatement(s, curEnv);
                     } catch (EnvironmentException e) {
                         throwNameResolutionException(e, c.getFileName(), s);
+                    } catch (StaticAnalyzerException e) {
+                        e.setFileName(curClass.getFileName());
+                        throw e;
                     }
+                }
+
+                if (curMethod.getReturnType() != BaseEnvironment.TYPE_VOID
+                        && !staticAnalyzer.isReturnOnAllCodePath() && staticAnalyzer.isCompletedNormally()) {
+                    throw new StaticAnalyzerException(curClass.getFileName(), curMethod.getMethodDecl(),
+                            String.format("Method '%s' does not return a value on all code path",
+                                    curMethod.getName()));
                 }
             }
         }
         Environment.turnOffHints();
     }
 
+    public int method() {
+        while (true == true) {}
+    }
+
     private Environment resolveStatement(Statement s, Environment env) {
         switch (s.getStatementType()) {
             case Statement.TYPE_BLOCK: {
                 Block b = (Block) s;
+                staticAnalyzer.analyzeReachability(b);
+
                 Environment oldEnv = env;
                 for (Statement st : b.getStatements()) {
                     env = resolveStatement(st, env);
@@ -334,11 +360,15 @@ public class NameResolver {
             }
             case Statement.TYPE_EXPRESSION: {
                 ExpressionStatement expr = (ExpressionStatement) s;
+                staticAnalyzer.analyzeReachability(expr);
                 resolveExpression(expr.getExpr(), env);
                 break;
             }
             case Statement.TYPE_FOR: {
                 ForStatement forStatement = (ForStatement) s;
+                staticAnalyzer.analyzeReachability(forStatement);
+
+                staticAnalyzer.pushAndReset();
                 Environment oldEnv = env;
                 if (forStatement.getForInit() != null) {
                     env = resolveStatement(forStatement.getForInit(), env);
@@ -355,20 +385,39 @@ public class NameResolver {
                 }
                 resolveStatement(forStatement.getBody(), env);
                 env = oldEnv;
+
+                staticAnalyzer.popState();
                 break;
             }
             case Statement.TYPE_IF: {
                 IfStatement ifStatement = (IfStatement) s;
+                staticAnalyzer.analyzeReachability(ifStatement);
+
+                boolean completeNormally = false;
+                boolean returnOnAllCodePath = true;
+
                 for (IfStatement.IfBlock b : ifStatement.getIfBlocks()) {
+                    staticAnalyzer.pushState();
                     resolveStatement(b, env);
+                    completeNormally |= staticAnalyzer.isCompletedNormally();
+                    returnOnAllCodePath &= staticAnalyzer.isReturnOnAllCodePath();
+                    staticAnalyzer.popState();
                 }
                 if (ifStatement.getElseBlock() != null) {
+                    staticAnalyzer.pushState();
                     resolveStatement(ifStatement.getElseBlock(), env);
+                    completeNormally |= staticAnalyzer.isCompletedNormally();
+                    returnOnAllCodePath &= staticAnalyzer.isReturnOnAllCodePath();
+                    staticAnalyzer.popState();
+                    staticAnalyzer.setCompletedNormally(completeNormally);
+                    staticAnalyzer.setReturnOnAllCodePath(returnOnAllCodePath);
                 }
                 break;
             }
             case Statement.TYPE_IF_BLOCK: {
                 IfStatement.IfBlock ifBlock = (IfStatement.IfBlock) s;
+                staticAnalyzer.analyzeReachability(ifBlock);
+
                 Class type = resolveExpression(ifBlock.getCondition(), env);
                 if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
                     throw new IncompatibleTypeException(curClass.getFileName(),
@@ -379,6 +428,8 @@ public class NameResolver {
             }
             case Statement.TYPE_RETURN: {
                 ReturnStatement returnStatement = (ReturnStatement) s;
+                staticAnalyzer.analyzeReachability(returnStatement);
+
                 Expression e = returnStatement.getExpression();
                 Class returnType = curMethod.getReturnType();
                 if (returnType != BaseEnvironment.TYPE_VOID && e == null) {
@@ -398,6 +449,8 @@ public class NameResolver {
             }
             case Statement.TYPE_VARDECL: {
                 VarDecl vd = (VarDecl) s;
+                staticAnalyzer.analyzeReachability(vd);
+
                 Variable var = new Variable(null, vd, env);
                 env = new LocalVariableEnvironment(var.getName(), var, env);
                 if (vd instanceof VarInitDecl) {
@@ -407,17 +460,25 @@ public class NameResolver {
                         throw new IncompatibleTypeException(curClass.getFileName(), vd,
                                 var.getType(), type);
                     }
+
+                    var.setInitialized(true);
                 }
                 break;
             }
             case Statement.TYPE_WHILE: {
                 WhileStatement whileStatement = (WhileStatement) s;
+                staticAnalyzer.analyzeReachability(whileStatement);
+
                 Class type = resolveExpression(whileStatement.getCondition(), env);
                 if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
                     throw new IncompatibleTypeException(curClass.getFileName(),
                             whileStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
                 }
-                resolveStatement(whileStatement.getBody(), env);
+                if (whileStatement.getBody() != null) {
+                    staticAnalyzer.pushAndReset();
+                    resolveStatement(whileStatement.getBody(), env);
+                }
+                staticAnalyzer.popState();
                 break;
             }
         }
@@ -602,6 +663,7 @@ public class NameResolver {
             }
             case Expression.LITERAL_EXPRESSION: {
                 LiteralExpression literalExpression = (LiteralExpression) ex;
+                if (literalExpression.getLiteral().getType() == Token.Type.SEMI) return null;
                 Literal lit = new Literal(literalExpression.getLiteral(), env);
                 literalExpression.setProper(lit);
                 return lit.getType();
@@ -1107,6 +1169,12 @@ public class NameResolver {
                 throw new TypeException(fileName, pos,
                         String.format("Static method '%s' cannot be referenced from non-static context",
                                 m.getName()), e);
+            }
+            case EnvironmentException.ERROR_VARIABLE_MIGHT_NOT_HAVE_BEEN_INITIALIZED: {
+                Variable v = (Variable) e.getExtra();
+                throw new TypeException(fileName, pos,
+                        String.format("Variable '%s' might not have been initialized",
+                                v.getName()), e);
             }
         }
     }

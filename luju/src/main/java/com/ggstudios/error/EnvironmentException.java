@@ -12,6 +12,7 @@ public class EnvironmentException extends RuntimeException {
     public static final int ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT = 6;
     public static final int ERROR_STATIC_FIELD_FROM_NON_STATIC_CONTEXT = 7;
     public static final int ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT = 8;
+    public static final int ERROR_VARIABLE_MIGHT_NOT_HAVE_BEEN_INITIALIZED = 9;
 
     public EnvironmentException(String message, int type) {
         super(message);

@@ -66,6 +66,8 @@ public class ForStatement extends Statement {
             sb.append("ForUpdate");
             forUpdate.toPrettyString(sb, 0);
         }
-        body.toPrettyString(sb, level + 1);
+        if (body != null) {
+            body.toPrettyString(sb, level + 1);
+        }
     }
 }

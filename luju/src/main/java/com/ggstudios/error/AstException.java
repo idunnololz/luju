@@ -22,6 +22,10 @@ public class AstException extends RuntimeException {
         this.fileName = fileName;
     }
 
+    protected void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
     public AstNode getNode() {
         return node;
     }
