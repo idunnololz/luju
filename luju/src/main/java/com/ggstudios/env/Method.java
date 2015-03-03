@@ -4,13 +4,18 @@ import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.types.MethodDecl;
 import com.ggstudios.types.VarDecl;
+import com.ggstudios.utils.MapUtils;
 
+import java.util.HashMap;
 import java.util.List;
 
 public class Method {
+    private static final HashMap<String, Integer> nameCount = new HashMap<>();
+
     private final Class declaringClass;
     private final MethodDecl methodDecl;
     private String name;
+    protected String uniqueName;
 
     private Class returnType;
     private Class[] parameterTypes;
@@ -43,6 +48,22 @@ public class Method {
         }
 
         modifiers = methodDecl.getModifiers();
+
+        generateUniqueName();
+    }
+
+    private void generateUniqueName() {
+        int count = MapUtils.getOrDefault(nameCount, name, 0);
+        if (count++ != 0) {
+            uniqueName = "?" + name + "@" + count;
+        } else {
+            uniqueName = "?" + name;
+        }
+        nameCount.put(name, count);
+    }
+
+    public String getUniqueName() {
+        return uniqueName;
     }
 
     public int getModifiers() {
@@ -109,5 +130,9 @@ public class Method {
         }
         sb.append("#");
         return sb.toString();
+    }
+
+    public Class[] getParameterTypes() {
+        return parameterTypes;
     }
 }

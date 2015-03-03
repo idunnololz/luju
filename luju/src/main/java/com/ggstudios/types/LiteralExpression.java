@@ -34,4 +34,8 @@ public class LiteralExpression extends Expression {
     public void setProper(Literal lit) {
         this.proper = lit;
     }
+
+    public Literal getProper() {
+        return proper;
+    }
 }

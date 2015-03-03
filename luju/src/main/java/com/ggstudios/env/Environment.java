@@ -3,12 +3,17 @@ package com.ggstudios.env;
 import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.types.ReferenceType;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public abstract class Environment {
     protected static boolean inStaticMode = false;
     protected static boolean allowNonStatic = true;
     protected static boolean noStaticMode = false;
     protected static boolean allowProtected = true;
     protected static WarningResolver resolver;
+
+    protected static List<Field> lookupTrace = new ArrayList<>();
 
     public static final int WARNING_SUSPICIOUS_PROTECTED_ACCESS_FIELD = 1;
     public static final int WARNING_SUSPICIOUS_PROTECTED_ACCESS_METHOD = 2;
@@ -152,6 +157,14 @@ public abstract class Environment {
                     fullName);
         }
         return (Constructor) r.result;
+    }
+
+    public static List<Field> getLookupTrace() {
+        return lookupTrace;
+    }
+
+    public static void setLookupTrace(List<Field> trace) {
+        lookupTrace = trace;
     }
 
     public static interface WarningResolver {

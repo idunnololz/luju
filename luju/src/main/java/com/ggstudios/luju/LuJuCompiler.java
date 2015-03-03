@@ -113,7 +113,9 @@ public class LuJuCompiler {
             return processError(RETURN_CODE_ERROR);
         }
 
-        codeGenerator.generateCode(ast, assembler);
+        if (args.isGenerateCode()) {
+            codeGenerator.generateCode(ast, assembler);
+        }
 
         return RETURN_CODE_SUCCESS;
     }

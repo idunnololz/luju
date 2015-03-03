@@ -1122,9 +1122,9 @@ public class AstGenerator {
     }
 
     private List<Node> listFromTree(Node node, int aIndex, int bIndex, int cIndex, int shorterRuleRhsLen) {
-        // A -> B
+        // A -> B.java
         //      ^- cIndex
-        // A -> A B <- bIndex
+        // A -> A B.java <- bIndex
         //      ^- aIndex
         List<Node> nodes = new ArrayList<>();
 

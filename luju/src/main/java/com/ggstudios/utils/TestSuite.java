@@ -25,9 +25,10 @@ public class TestSuite {
         }
     }
 
-    public void runTests(int assignmentNumber) {
+    public void runTests(Main.ArgList argList) {
+        defaultTestArgs.flags = argList.flags;
         Print.setPrinter(new Print.SilentPrinter());
-        runTests("tests/marmoset/a" + assignmentNumber);
+        runTests("tests/marmoset/a" + argList.assignmentNumber);
         compiler.shutdown();
     }
 

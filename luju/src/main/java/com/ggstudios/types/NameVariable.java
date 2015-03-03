@@ -8,8 +8,6 @@ import java.util.List;
 public class NameVariable extends VariableExpression {
     private List<Token> idSeq = new ArrayList<>();
 
-    public NameVariable() {}
-
     public NameVariable(List<Token> isSeq) {
         this.idSeq = isSeq;
     }

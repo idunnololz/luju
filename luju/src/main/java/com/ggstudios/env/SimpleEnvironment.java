@@ -43,6 +43,8 @@ public abstract class SimpleEnvironment extends Environment {
     public LookupResult lookup(String[] name) {
         if (name.length == 0) return null;
 
+        lookupTrace.clear();
+
         boolean needToEnsureSamePackage = false;
         boolean temp = Environment.allowProtected;
         boolean typeFound = false;
@@ -60,6 +62,7 @@ public abstract class SimpleEnvironment extends Environment {
                 o = ((Map) o).get(name[i++]);
             } else if (o instanceof Field) {
                 Field f = (Field) o;
+                lookupTrace.add(f);
                 o = f.getType().get(name[i++]);
                 Environment.allowNonStatic = true;
                 Environment.allowProtected = false;

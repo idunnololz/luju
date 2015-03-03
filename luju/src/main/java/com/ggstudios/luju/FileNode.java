@@ -1,6 +1,7 @@
 package com.ggstudios.luju;
 
-import com.ggstudios.env.Environment;
+import com.ggstudios.env.*;
+import com.ggstudios.env.Class;
 import com.ggstudios.types.TypeDecl;
 import com.ggstudios.utils.PrintUtils;
 
@@ -20,6 +21,7 @@ public class FileNode {
     private TypeDecl typeDecl;
 
     private Environment env;
+    private Class aClass;
 
     public FileNode() {
         imports.add("java.lang.*");
@@ -104,5 +106,17 @@ public class FileNode {
 
     public void setEnv(Environment env) {
         this.env = env;
+    }
+
+    public void setClass(Class aClass) {
+        this.aClass = aClass;
+    }
+
+    public Class getThisClass() {
+        return aClass;
+    }
+
+    public void setaClass(Class aClass) {
+        this.aClass = aClass;
     }
 }

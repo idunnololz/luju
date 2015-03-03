@@ -5,8 +5,10 @@ import com.ggstudios.luju.Token;
 public class Literal extends Field {
 
     private Object value;
+    private Token.Type tokenType;
 
     public Literal(Token t, Environment env) {
+        tokenType = t.getType();
         switch (t.getType()) {
             case STRINGLIT:
                 value = t.getRaw();
@@ -42,4 +44,7 @@ public class Literal extends Field {
         return value;
     }
 
+    public Token.Type getTokenType() {
+        return tokenType;
+    }
 }

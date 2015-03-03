@@ -1,15 +1,14 @@
 package com.ggstudios.luju;
 
+import com.ggstudios.utils.AssemblerUtils;
 import com.ggstudios.utils.Print;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.PrintStream;
 
 public class Assembler {
@@ -74,13 +73,13 @@ public class Assembler {
         outputThread = new Thread() {
             public void run() {
                 BufferedReader in = new BufferedReader(new InputStreamReader(out));
-                while (!quit) {
-                    try {
-                        String s = in.readLine();
-                        Print.ln(s);
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                String s;
+                try {
+                    while ((s = in.readLine()) != null) {
+                            Print.ln(s);
                     }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         };
@@ -88,13 +87,13 @@ public class Assembler {
         errorThread = new Thread() {
             public void run() {
                 BufferedReader in = new BufferedReader(new InputStreamReader(err));
-                while (!quit) {
-                    try {
-                        String s = in.readLine();
+                String s;
+                try {
+                    while ((s = in.readLine()) != null) {
                         Print.e(s);
-                    } catch (IOException e) {
-                        e.printStackTrace();
                     }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         };
@@ -104,6 +103,8 @@ public class Assembler {
     }
 
     public void assemble(String directoryPath) throws IOException {
+        generateUtilFiles(directoryPath);
+
         File dir = new File(directoryPath);
         File [] files = dir.listFiles(new FilenameFilter() {
             @Override
@@ -124,7 +125,14 @@ public class Assembler {
         }
         ps.println("ld output/*.o -lmsvcrt -lkernel32 -subsystem=console -entry=_start -o test.exe");
         ps.println("./test");
+        ps.println("echo $'\\n'$?");
         ps.flush();
+    }
+
+    private void generateUtilFiles(String dir) {
+        if (os == Os.WINDOWS) {
+            AssemblerUtils.outputWindowsHelperFile(dir);
+        }
     }
 
     public void shutdown() {

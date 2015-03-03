@@ -36,8 +36,13 @@ public class AstNode {
         this.col = col;
     }
 
-    public void toPrettyString(StringBuilder sb, int level) {
+    protected void toPrettyString(StringBuilder sb, int level) {
         PrintUtils.level(sb, level);
         sb.append(getClass().getSimpleName());
+    }
+
+    public StringBuilder toPrettyString(StringBuilder sb) {
+        toPrettyString(sb, 0);
+        return sb;
     }
 }

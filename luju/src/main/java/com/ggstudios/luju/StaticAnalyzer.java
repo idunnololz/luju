@@ -81,7 +81,9 @@ public class StaticAnalyzer {
         s.setCondition(foldConstants(s.getCondition()));
         Expression cond = s.getCondition();
 
-        if (cond.getExpressionType() == Expression.LITERAL_EXPRESSION) {
+        if (cond == null) {
+            completedNormally = false;
+        } else if (cond.getExpressionType() == Expression.LITERAL_EXPRESSION) {
             LiteralExpression lit = (LiteralExpression) cond;
             if (lit.getLiteral().getType() == Token.Type.TRUE) {
                 completedNormally = false;
@@ -117,13 +119,9 @@ public class StaticAnalyzer {
         this.completedNormally = completedNormally;
     }
 
-    public int a() {
-        while (true & true) {
-
-        }
-    }
-
     private Expression foldConstants(Expression cond) {
+        if (cond == null) return null;
+
         switch (cond.getExpressionType()) {
             case Expression.BINARY_EXPRESSION: {
                 BinaryExpression binEx = (BinaryExpression) cond;

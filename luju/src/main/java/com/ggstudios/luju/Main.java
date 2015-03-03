@@ -21,9 +21,10 @@ public class Main {
             a = new String[]{
                     //"-t",
                     //"-p",
-                    "-A",
-                    //"-d", TEST_DIR + "Test1",
-                    TEST_DIR + "A.java",
+                    //"-A",
+                    "-d", TEST_DIR + "Test2",
+                    //"-a",
+                    //TEST_DIR + "A.java",
                     "-d", STDLIB_DIR + "2.0/java"
                     //TEST_DIR + "Test.java"
             };
@@ -53,6 +54,9 @@ public class Main {
                 }
                 char op = flag.charAt(1);
                 switch (op) {
+                    case 'a':
+                        argList.flags = argList.flags & ArgList.FLAG_ZERO_PHASE | ((ArgList.FLAG_ANALYZE << 1) - 1);
+                        break;
                     case 't':
                         argList.flags |= ArgList.FLAG_PRINT_TOKENS;
                         break;
@@ -110,7 +114,7 @@ public class Main {
 
         if (argList.isRunTests()) {
             TestSuite ts = new TestSuite();
-            ts.runTests(argList.assignmentNumber);
+            ts.runTests(argList);
         } else {
             LuJuCompiler compiler = new LuJuCompiler(argList.maxThreads);
             try {
@@ -122,7 +126,7 @@ public class Main {
     }
 
     private static void printUsage() {
-        Print.ln("usage: java luju [-t] [-p] [-T assignment-number] [-A] [-d directory] [-z threads] input_file_1 ...");
+        Print.ln("usage: java luju [-a] [-t] [-p] [-T assignment-number] [-A] [-d directory] [-z threads] input_file_1 ...");
     }
 
     public static class ArgList {
@@ -131,6 +135,10 @@ public class Main {
         public static final int FLAG_ALL = 0xFFFF;
         public static final int FLAG_TOKENIZE = 0x1;
         public static final int FLAG_PARSE = 0x2;
+        public static final int FLAG_ANALYZE = 0x4;
+        public static final int FLAG_GEN_CODE = 0x8;
+
+        public static final int FLAG_ZERO_PHASE = ~FLAG_ALL;
 
         public static final int FLAG_PRINT_TOKENS       = 0x00010000;
         public static final int FLAG_PRINT_PARSE_TREE   = 0x00020000;
@@ -177,6 +185,10 @@ public class Main {
 
         public boolean isPrintAst() {
             return (flags & FLAG_PRINT_AST) != 0;
+        }
+
+        public boolean isGenerateCode() {
+            return (flags & FLAG_GEN_CODE) != 0;
         }
     }
 }

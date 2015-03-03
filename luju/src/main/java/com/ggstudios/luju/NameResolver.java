@@ -164,6 +164,7 @@ public class NameResolver {
             FileNode fn = ast.get(i);
             Class clazz = baseEnvironment.lookupClazz((fn.getPackageName() + "." + fn.getTypeDecl().getTypeName()).split("\\."), false);
             buildBaseEnvironment(fn, clazz);
+            fn.setClass(clazz);
         }
 
         // check for cyclic class extends...
@@ -803,6 +804,10 @@ public class NameResolver {
                     f = getFieldFromVariableExpression(varExpr, env);
                     Environment.setNoStaticMode(false);
                 }
+                List<Field> lookupTrace = new ArrayList<>(Environment.getLookupTrace());
+                lookupTrace.add(f);
+
+                varExpr.setProper(lookupTrace);
                 return f.getType();
             }
             default:
@@ -825,11 +830,16 @@ public class NameResolver {
             inStaticContext = false;
             Field f = (Field) res;
             if (checkingFields) {
+                // preserve the old lookup trace...
+                List<Field> lookupTrace = Environment.getLookupTrace();
+                Environment.setLookupTrace(new ArrayList<Field>());
+
                 LookupResult r = env.lookupName(new String[]{arr[0]});
                 if (r != null && r.result instanceof Field) {
                     Field field = (Field) r.result;
                     ensureValidReference(curField, field);
                 }
+                Environment.setLookupTrace(lookupTrace);
             }
             return f;
         } else if (res instanceof Class) {
@@ -854,6 +864,8 @@ public class NameResolver {
             if (inStaticContext) {
                 Environment.setStaticMode(false);
             }
+            List<Field> lookupTrace = Environment.getLookupTrace();
+            lookupTrace.add(f);
         } else if (varExpr instanceof NameVariable) {
             NameVariable nVar = (NameVariable) varExpr;
             String varName = nVar.getName();
@@ -1015,12 +1027,8 @@ public class NameResolver {
 
             for (Class interfaze : interfaces) {
                 if (!interfaze.isComplete()) {
-                    if (interfaze.getInterfaces().length == 0) {
-                        interfaze.setIsComplete(true);
-                    } else {
-                        toResolve.add(interfaze);
-                        dependenciesComplete = false;
-                    }
+                    toResolve.add(interfaze);
+                    dependenciesComplete = false;
                 }
             }
 
@@ -1034,7 +1042,7 @@ public class NameResolver {
                     throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
                             "Cannot inherit from interface");
                 }
-                mergeMethodWithClass(c, superClass);
+                mergeClass(c, superClass);
             }
 
             for (Class i : interfaces) {
@@ -1042,7 +1050,7 @@ public class NameResolver {
                     throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
                             "Cannot extend class");
                 }
-                mergeMethodWithClass(c, i);
+                mergeClass(c, i);
             }
 
             c.setIsComplete(true);
@@ -1050,7 +1058,7 @@ public class NameResolver {
         }
     }
 
-    private void mergeMethodWithClass(Class c, Class toMerge) {
+    private void mergeClass(Class c, Class toMerge) {
         for (Map.Entry<String, Object> entry : toMerge.entrySet()) {
             Object val = entry.getValue();
             if (c.containsKey(entry.getKey())) {

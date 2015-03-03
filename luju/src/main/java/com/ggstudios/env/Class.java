@@ -4,14 +4,21 @@ import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.types.ClassDecl;
 import com.ggstudios.types.TypeDecl;
+import com.ggstudios.utils.MapUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class Class extends HashMap<String, Object> {
     private Set<String> methodSignatures = new HashSet<>();
+
+    private List<Method> declaredMethods = new ArrayList<>();
+    private List<Field> declaredFields = new ArrayList<>();
 
     private Package thisPackage;
     private int modifiers;
@@ -27,9 +34,16 @@ public class Class extends HashMap<String, Object> {
 
     private boolean isComplete = false;
 
-    protected Class() {}
+    private static int LAST_ID = 0;
+    private final int id;
+
+    protected Class() {
+        id = -1;
+    }
 
     public Class(TypeDecl classDecl, String fileName) {
+        id = LAST_ID++;
+
         this.fileName = fileName;
         this.classDecl = classDecl;
 
@@ -40,6 +54,10 @@ public class Class extends HashMap<String, Object> {
         modifiers = classDecl.getModifiers();
 
         arrayClass.resolveSelf(arrayClass.getEnvironment());
+    }
+
+    public int getId() {
+        return id;
     }
 
     protected void setPackage(Package p) {
@@ -84,6 +102,7 @@ public class Class extends HashMap<String, Object> {
                     String.format("'%s' is already defined in '%s'", method.getHumanReadableSignature(), getCanonicalName()));
         }
         put(method.getMethodSignature(), method);
+        declaredMethods.add(method);
     }
 
     public void putField(Field field) {
@@ -91,6 +110,8 @@ public class Class extends HashMap<String, Object> {
             throw new NameResolutionException(getFileName(), field.getVarDecl(),
                     String.format("Variable '%s' is already defined in this scope", field.getName()));
         }
+
+        declaredFields.add(field);
     }
 
     public void putConstructor(Constructor constructor) {
@@ -159,7 +180,7 @@ public class Class extends HashMap<String, Object> {
     }
 
     /**
-     * A class is considered complete if all it's methods/fields are added and inheritance is done
+     * A class is considered complete if all it's declaredMethods/fields are added and inheritance is done
      * @return
      */
     public boolean isComplete() {
@@ -202,7 +223,7 @@ public class Class extends HashMap<String, Object> {
             classToLevel.put(BaseEnvironment.TYPE_SHORT,    0x00000FFF);
             classToLevel.put(BaseEnvironment.TYPE_INT,      0x0000FFFF);
         }
-        return classToLevel.getOrDefault(c, 0);
+        return MapUtils.getOrDefault(classToLevel, c, 0);
     }
 
     public static int getCategory(Class c) {
@@ -213,7 +234,7 @@ public class Class extends HashMap<String, Object> {
             classToCategory.put(BaseEnvironment.TYPE_SHORT, CATEGORY_NUMBER);
             classToCategory.put(BaseEnvironment.TYPE_BOOLEAN, CATEGORY_BOOLEAN);
         }
-        return classToCategory.getOrDefault(c, 0);
+        return MapUtils.getOrDefault(classToCategory, c, 0);
     }
 
     public static boolean isValidCast(Class cast, Class original) {
@@ -294,5 +315,54 @@ public class Class extends HashMap<String, Object> {
 
     public boolean isSimple() {
         return false;
+    }
+
+    public List<Method> getDeclaredMethods() {
+        return declaredMethods;
+    }
+
+    public List<Field> getDeclaredFields() {
+        return declaredFields;
+    }
+
+    private List<Field> completeFieldList;
+    private Map<Field, Integer> fieldToIndex;
+
+    private List<Method> completeMethodList;
+
+    private String vtableLabel;
+
+    public void generateDataForCodeGeneration() {
+        LinkedList<Field> fieldList = new LinkedList<>();
+        LinkedList<Method> methodList = new LinkedList<>();
+
+        fieldToIndex = new HashMap<>();
+        Class thisClass = this;
+        do {
+            for (Field f : thisClass.getDeclaredFields()) {
+                fieldToIndex.put(f, fieldList.size());
+                fieldList.addFirst(f);
+            }
+            for (Method m : thisClass.getDeclaredMethods()) {
+                methodList.addFirst(env.lookupMethod(m.getMethodSignature()));
+            }
+        } while ((thisClass = thisClass.getSuperClass()) != null);
+
+        completeFieldList = fieldList;
+        completeMethodList = methodList;
+
+        vtableLabel = getCanonicalName() + "$vt";
+    }
+
+    public List<Field> getCompleteFieldList() {
+        return completeFieldList;
+    }
+
+    public String getVtableLabel() {
+        return vtableLabel;
+    }
+
+    public List<Method> getCompleteMethodList() {
+        return completeMethodList;
     }
 }

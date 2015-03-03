@@ -1,40 +1,744 @@
 package com.ggstudios.luju;
 
-import com.ggstudios.utils.AssemblerUtils;
+import com.ggstudios.asm.IntermediateSource;
+import com.ggstudios.asm.Register;
+import com.ggstudios.asm.Section;
+import com.ggstudios.env.BaseEnvironment;
+import com.ggstudios.env.Class;
+import com.ggstudios.env.Environment;
+import com.ggstudios.env.Field;
+import com.ggstudios.env.Literal;
+import com.ggstudios.env.LocalVariableEnvironment;
+import com.ggstudios.env.Method;
+import com.ggstudios.env.Modifier;
+import com.ggstudios.env.Variable;
+import com.ggstudios.error.IncompatibleTypeException;
+import com.ggstudios.error.TypeException;
+import com.ggstudios.types.ArrayAccessExpression;
+import com.ggstudios.types.ArrayCreationExpression;
+import com.ggstudios.types.Block;
+import com.ggstudios.types.Expression;
+import com.ggstudios.types.ExpressionStatement;
+import com.ggstudios.types.ForStatement;
+import com.ggstudios.types.IfStatement;
+import com.ggstudios.types.LiteralExpression;
+import com.ggstudios.types.MethodDecl;
+import com.ggstudios.types.ReturnStatement;
+import com.ggstudios.types.Statement;
+import com.ggstudios.types.VarDecl;
+import com.ggstudios.types.VarInitDecl;
+import com.ggstudios.types.VariableExpression;
+import com.ggstudios.types.WhileStatement;
+import com.ggstudios.utils.FileUtils;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 public class CodeGenerator {
     private static final String OUTPUT_DIRECTORY = "output";
 
-    public void generateCode(Ast ast, Assembler assembler) {
-        AssemblerUtils.outputWindowsHelperFile(OUTPUT_DIRECTORY);
+    private static final int POINTER_SIZE = 4; // in bytes
 
-        File f = new File(OUTPUT_DIRECTORY + File.separator + "test.s");
-        try {
-            PrintWriter pw = new PrintWriter(f);
-            pw.write("extern _printf\n" +
-                    "extern __debexit\n" +
-                    "global _start\n" +
-                    "_start:\n" +
-                    "push msg\n" +
-                    "call _printf\n" +
-                    "mov eax, 1\n" +
-                    "call __debexit\n" +
-                    "\n" +
-                    "msg db \"Hello world\",0");
-            pw.close();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
+    private boolean comment = true;
+
+    private List<Class> declaredClasses;
+    private IntermediateSource[] sources;
+    private IntermediateSource curSrc;
+
+    private List<String> classLoaders;
+
+    public void generateCode(Ast ast, Assembler assembler) {
+        // Strategy for generating our sources
+        // 1. For each class:
+        // 2.   Generate class information. Write into .data section
+        // 3.   Gather all static variables. Write into .bss section
+        // 4.   Generate 'function' block to initialize all static variables
+        // 5.   Generate all methods...
+        // 4. Generate _start block...
+        // 5.   Call all static initialization functions
+        // 6.   Call test
+        // 7.   Exit (with exit code in EAX)
+
+        classLoaders = new ArrayList<>();
+
+        declaredClasses = new ArrayList<>();
+        for (FileNode fn : ast) {
+            Class c = fn.getThisClass();
+            if (c != null) {
+                declaredClasses.add(c);
+            }
         }
+
+        sources = new IntermediateSource[declaredClasses.size()];
+        for (int i = 0; i < sources.length; i++) {
+            sources[i] = new IntermediateSource();
+        }
+
+        generateSourcesForClasses();
+
+
+        HashMap<String, String> fileNameToText = new HashMap<>();
+
+        for (IntermediateSource s : sources) {
+            fileNameToText.put(s.getFileName(), s.toString());
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (String s : classLoaders) {
+            sb.append("call\t");
+            sb.append(s);
+            sb.append('\n');
+        }
+
+        IntermediateSource testSource = new IntermediateSource();
+        testSource.setFileName("main.s");
+
+        testSource.setActiveSectionId(Section.TEXT);
+        testSource.glabel("_start");
+        for (String s : classLoaders) {
+            testSource.call(s);
+        }
+        testSource.call("_test");
+        testSource.call("__debexit");
+
+        fileNameToText.put(testSource.getFileName(), testSource.toString());
+
+        FileUtils.emptyDirectory(OUTPUT_DIRECTORY);
+        FileUtils.writeStringsToFiles(OUTPUT_DIRECTORY, fileNameToText);
 
         try {
             assembler.assemble(OUTPUT_DIRECTORY);
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Naming conventions used in assembly files:
+     * Classes will be named normally. For instance, a.b.C (where a.b is the package and C is the
+     * class name) will still be named a.b.C in the assembly. Note that the default package has name
+     * '@default'.
+     *
+     * Methods names will have the form _methodName[@version]. For instance, if class C has a method
+     * named 'a', the method will have label '_a'. If another method also has the name 'a' or if 'a'
+     * is overloaded, '_a@2' will be used and so on.
+     *
+     * Field names will have the form ?fieldName[@verion]. For instance if class C has field 'b',
+     * the field will have label '?b'.
+     *
+     * To avoid name clashes, labels generated by the compiler begin with @
+     */
+
+    private void generateSourcesForClasses() {
+        // 1. For each class:
+        // 2.   Generate class information. Write into .data section
+        // 3.   Gather all static variables. Write into .bss section
+        // 4.   Generate 'function' block to initialize all static variables
+        // 5.   Generate all methods...
+        Method entryPoint = null;
+
+        for (Class c : declaredClasses) {
+            // Before we begin, ask the class to pre generate some information that will be useful
+            // to us in code generation...
+            c.generateDataForCodeGeneration();
+
+            IntermediateSource src = sources[c.getId()];
+            curSrc = src;
+            src.setFileName(c.getCanonicalName().replace('.', '@') + ".s");
+
+            generateStaticClassData(c);
+            declareAllStaticFields(c);
+            generateStaticInitCode(c);
+
+            for (Method method : c.getDeclaredMethods()) {
+                // entry point looks like this: static int test()
+                if (Modifier.isAbstract(method.getModifiers())) continue;
+
+                if (entryPoint == null && Modifier.isStatic(method.getModifiers()) &&
+                        method.getReturnType() == BaseEnvironment.TYPE_INT &&
+                        method.getParameterTypes().length == 0 && method.getName().equals("test")) {
+                    entryPoint = method;
+
+                    generateCodeForMethod("_test", entryPoint);
+
+                } else {
+                    // TODO
+                }
+            }
+        }
+    }
+
+    private void generateCodeForMethod(String methodLabel, Method method) {
+        curSrc.glabel(methodLabel);
+
+        MethodDecl md = method.getMethodDecl();
+        Block b = md.getBlock();
+
+        curSrc.push(Register.EBP);
+        curSrc.mov(Register.EBP, Register.ESP);
+
+        for (Statement s : b.getStatements()) {
+            generateCodeForStatement(s);
+        }
+
+        if (method.getReturnType() == BaseEnvironment.TYPE_VOID) {
+            curSrc.mov(Register.ESP, Register.EBP);
+            curSrc.pop(Register.EBP);
+            curSrc.ret();
+        }
+    }
+
+    private void generateStaticClassData(Class c) {
+        // There will be one block of constant class data defined in the .data section per class
+        // The structure of each class info will be:
+        // <vptr>
+        // <inheritance tree> = list of (<ptr_to_class>, <offset>)
+
+        curSrc.setActiveSectionId(Section.DATA);
+
+        curSrc.glabel(c.getVtableLabel());
+
+        // TODO generate vtable
+
+        curSrc.glabel(c.getCanonicalName());
+
+        curSrc.dd(c.getVtableLabel());
+
+        Class superClass;
+        if ((superClass = c.getSuperClass()) != null) {
+            curSrc.dd(superClass.getCanonicalName());
+            curSrc.dd(superClass.getDeclaredMethods().size() * POINTER_SIZE);
+        }
+
+        for (Class i : c.getInterfaces()) {
+            curSrc.dd(i.getCanonicalName());
+            curSrc.dd(i.getDeclaredMethods().size() * POINTER_SIZE);
+        }
+    }
+
+    private void generateStaticInitCode(Class c) {
+        IntermediateSource src = curSrc;
+
+        src.setActiveSectionId(Section.TEXT);
+        String s = "@init" + c.getId();
+        classLoaders.add(s);
+        src.glabel(s);
+
+        StringBuilder sb = new StringBuilder();
+
+        for (Field f : c.getDeclaredFields()) {
+            if (!Modifier.isStatic(f.getModifiers())) continue;
+
+            VarDecl vd = f.getVarDecl();
+
+            if (vd instanceof VarInitDecl) {
+                VarInitDecl vid = (VarInitDecl) vd;
+
+                if (comment) {
+                    curSrc.addComment(vid.toPrettyString(sb).toString());
+                    sb.setLength(0);
+                }
+
+                Register r = generateCodeForExpression(vid.getExpr());
+
+                curSrc.mov(String.format("dword [%s]", f.getUniqueName()), r.getAsm());
+            } else {
+                src.mov(f.getUniqueName(), 0);
+            }
+        }
+        src.ret();
+    }
+
+    private void generateCodeForStatement(Statement s) {
+        switch (s.getStatementType()) {
+//            case Statement.TYPE_BLOCK: {
+//                Block b = (Block) s;
+//                staticAnalyzer.analyzeReachability(b);
+//
+//                Environment oldEnv = env;
+//                for (Statement st : b.getStatements()) {
+//                    env = resolveStatement(st, env);
+//                }
+//                env = oldEnv;
+//                break;
+//            }
+//            case Statement.TYPE_EXPRESSION: {
+//                ExpressionStatement expr = (ExpressionStatement) s;
+//                staticAnalyzer.analyzeReachability(expr);
+//                resolveExpression(expr.getExpr(), env);
+//                break;
+//            }
+//            case Statement.TYPE_FOR: {
+//                ForStatement forStatement = (ForStatement) s;
+//                staticAnalyzer.analyzeReachability(forStatement);
+//
+//                staticAnalyzer.pushAndReset();
+//                Environment oldEnv = env;
+//                if (forStatement.getForInit() != null) {
+//                    env = resolveStatement(forStatement.getForInit(), env);
+//                }
+//                if (forStatement.getCondition() != null) {
+//                    Class type = resolveExpression(forStatement.getCondition(), env);
+//                    if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
+//                        throw new IncompatibleTypeException(curClass.getFileName(),
+//                                forStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
+//                    }
+//                }
+//                if (forStatement.getForUpdate() != null) {
+//                    resolveStatement(forStatement.getForUpdate(), env);
+//                }
+//                resolveStatement(forStatement.getBody(), env);
+//                env = oldEnv;
+//
+//                staticAnalyzer.popState();
+//                break;
+//            }
+//            case Statement.TYPE_IF: {
+//                IfStatement ifStatement = (IfStatement) s;
+//                staticAnalyzer.analyzeReachability(ifStatement);
+//
+//                boolean completeNormally = false;
+//                boolean returnOnAllCodePath = true;
+//
+//                for (IfStatement.IfBlock b : ifStatement.getIfBlocks()) {
+//                    staticAnalyzer.pushState();
+//                    resolveStatement(b, env);
+//                    completeNormally |= staticAnalyzer.isCompletedNormally();
+//                    returnOnAllCodePath &= staticAnalyzer.isReturnOnAllCodePath();
+//                    staticAnalyzer.popState();
+//                }
+//                if (ifStatement.getElseBlock() != null) {
+//                    staticAnalyzer.pushState();
+//                    resolveStatement(ifStatement.getElseBlock(), env);
+//                    completeNormally |= staticAnalyzer.isCompletedNormally();
+//                    returnOnAllCodePath &= staticAnalyzer.isReturnOnAllCodePath();
+//                    staticAnalyzer.popState();
+//                    staticAnalyzer.setCompletedNormally(completeNormally);
+//                    staticAnalyzer.setReturnOnAllCodePath(returnOnAllCodePath);
+//                }
+//                break;
+//            }
+//            case Statement.TYPE_IF_BLOCK: {
+//                IfStatement.IfBlock ifBlock = (IfStatement.IfBlock) s;
+//                staticAnalyzer.analyzeReachability(ifBlock);
+//
+//                Class type = resolveExpression(ifBlock.getCondition(), env);
+//                if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
+//                    throw new IncompatibleTypeException(curClass.getFileName(),
+//                            ifBlock.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
+//                }
+//                resolveStatement(ifBlock.getBody(), env);
+//                break;
+//            }
+            case Statement.TYPE_RETURN: {
+                ReturnStatement returnStatement = (ReturnStatement) s;
+                Expression e = returnStatement.getExpression();
+                Register r = generateCodeForExpression(e);
+
+                if (r != Register.EAX) {
+                    curSrc.mov(Register.EAX, r);
+                }
+
+                curSrc.mov(Register.ESP, Register.EBP);
+                curSrc.pop(Register.EBP);
+                curSrc.ret();
+                break;
+            }
+//            case Statement.TYPE_VARDECL: {
+//                VarDecl vd = (VarDecl) s;
+//                staticAnalyzer.analyzeReachability(vd);
+//
+//                Variable var = new Variable(null, vd, env);
+//                env = new LocalVariableEnvironment(var.getName(), var, env);
+//                if (vd instanceof VarInitDecl) {
+//                    VarInitDecl vid = (VarInitDecl) vd;
+//                    Class type = resolveExpression(vid.getExpr(), env);
+//                    if (!Class.isValidAssign(var.getType(), type)) {
+//                        throw new IncompatibleTypeException(curClass.getFileName(), vd,
+//                                var.getType(), type);
+//                    }
+//
+//                    var.setInitialized(true);
+//                }
+//                break;
+//            }
+//            case Statement.TYPE_WHILE: {
+//                WhileStatement whileStatement = (WhileStatement) s;
+//                staticAnalyzer.analyzeReachability(whileStatement);
+//
+//                Class type = resolveExpression(whileStatement.getCondition(), env);
+//                if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
+//                    throw new IncompatibleTypeException(curClass.getFileName(),
+//                            whileStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
+//                }
+//                if (whileStatement.getBody() != null) {
+//                    staticAnalyzer.pushAndReset();
+//                    resolveStatement(whileStatement.getBody(), env);
+//                }
+//                staticAnalyzer.popState();
+//                break;
+//            }
+        }
+    }
+
+    private Register generateCodeForExpression(Expression ex) {
+        switch (ex.getExpressionType()) {
+            case Expression.ARRAY_ACCESS_EXPRESSION: {
+                ArrayAccessExpression arrayAccess = (ArrayAccessExpression) ex;
+                Register r = generateCodeForExpression(arrayAccess.getIndexExpr());
+                curSrc.push(r);
+                r = generateCodeForExpression(arrayAccess.getArrayExpr());
+                Register r2 = Register.getNextRegisterFrom(r);
+                curSrc.pop(r2);
+                curSrc.imul(r2, r2, POINTER_SIZE);
+                Register r3 = Register.getNextRegisterFrom(r2);
+
+                curSrc.mov(r3, String.format("dword [%s+%s]", r.getAsm(), r2.getAsm()));
+                return r3;
+            }
+            case Expression.ARRAY_CREATION_EXPRESSION: {
+                ArrayCreationExpression arrayCreation = (ArrayCreationExpression) ex;
+                Register arraySize = generateCodeForExpression(arrayCreation.getDimExpr());
+                if (arraySize != Register.EAX) {
+                    curSrc.mov(Register.EAX, arraySize);
+                }
+
+                curSrc.add(Register.EAX, 1);    // for the length variable...
+                curSrc.shl(Register.EAX, 2);
+                curSrc.call("__malloc");
+
+                return Register.EAX;
+            }
+//            case Expression.ASSIGN_EXPRESSION: {
+//                AssignExpression assign = (AssignExpression) ex;
+//                Expression lhsExpr = assign.getLhs();
+//                if (checkingFields) {
+//                    if (lhsExpr.getExpressionType() == Expression.VARIABLE_EXPRESSION) {
+//                        VariableExpression varExpr = (VariableExpression) lhsExpr;
+//                        Field f = null;
+//                        if (varExpr instanceof FieldVariable) {
+//                            FieldVariable fVar = (FieldVariable) varExpr;
+//                            Class c = resolveExpression(fVar.getPrefixExpr(), env);
+//                            f = c.getEnvironment().lookupField(fVar.getFieldName());
+//                        } else if (varExpr instanceof NameVariable) {
+//                            NameVariable nVar = (NameVariable) varExpr;
+//                            f = env.lookupField(nVar.getName());
+//                        }
+//                        if (f.getDeclaringClass() == curClass) {
+//                            forgiveForwardUsage = true;
+//                        }
+//                    }
+//                }
+//
+//                switch (lhsExpr.getExpressionType()) {
+//                    case Expression.VARIABLE_EXPRESSION: {
+//                        boolean c = checkingFields;
+//                        checkingFields = false;
+//                        Field f = getFieldFromVariableExpression((VariableExpression) lhsExpr, env);
+//                        if (Modifier.isFinal(f.getModifiers())) {
+//                            throw new TypeException(curClass.getFileName(), lhsExpr,
+//                                    String.format(
+//                                            "Cannot assign a value to final variable '%s'",
+//                                            f.getName()));
+//                        }
+//                        checkingFields = c;
+//                        break;
+//                    }
+//                    case Expression.ARRAY_ACCESS_EXPRESSION:
+//                        break;
+//                    default:
+//                        throw new RuntimeException("wtf...did not see dis coming...");
+//                }
+//
+//                Class lhsType = resolveExpression(lhsExpr, env);
+//                Class rhsType = resolveExpression(assign.getRhs(), env);
+//                if (!Class.isValidAssign(lhsType, rhsType)) {
+//                    throw new IncompatibleTypeException(curClass.getFileName(), ex,
+//                            lhsType, rhsType);
+//                }
+//                return lhsType;
+//            }
+//            case Expression.BINARY_EXPRESSION: {
+//                BinaryExpression binEx = (BinaryExpression) ex;
+//                Class l = resolveExpression(binEx.getLeftExpr(),  env);
+//                Class r = resolveExpression(binEx.getRightExpr(),  env);
+//                switch (binEx.getOp().getType()) {
+//                    case LT:
+//                    case LT_EQ:
+//                    case GT:
+//                    case GT_EQ:
+//                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
+//                            throw new TypeException(curClass.getFileName(), ex,
+//                                    String.format("Operator '%s' cannot be applied to '%s', '%s'",
+//                                            binEx.getOp().getType(),
+//                                            l.getCanonicalName(),
+//                                            r.getCanonicalName()));
+//                        }
+//                        return BaseEnvironment.TYPE_BOOLEAN;
+//                    case PIPE:
+//                    case PIPE_PIPE:
+//                    case AMP:
+//                    case AMP_AMP:
+//                        if (l != BaseEnvironment.TYPE_BOOLEAN || r != BaseEnvironment.TYPE_BOOLEAN) {
+//                            throw new TypeException(curClass.getFileName(), ex,
+//                                    String.format("Operator '%s' cannot be applied to '%s', '%s'",
+//                                            binEx.getOp().getType(),
+//                                            l.getCanonicalName(),
+//                                            r.getCanonicalName()));
+//                        }
+//                        return BaseEnvironment.TYPE_BOOLEAN;
+//                    case EQ_EQ:
+//                    case NEQ:
+//                        if (!Class.isValidAssign(l, r) && !Class.isValidAssign(r, l)) {
+//                            throw new TypeException(curClass.getFileName(), ex,
+//                                    String.format("Invalid comparison made between type '%s' and '%s'",
+//                                            l.getCanonicalName(),
+//                                            r.getCanonicalName()));
+//                        }
+//                        return BaseEnvironment.TYPE_BOOLEAN;
+//                    case PLUS:
+//                        if ((l == BaseEnvironment.TYPE_STRING || r == BaseEnvironment.TYPE_STRING) &&
+//                                (l != BaseEnvironment.TYPE_VOID && r != BaseEnvironment.TYPE_VOID))
+//                            return BaseEnvironment.TYPE_STRING;
+//                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
+//                            throw new TypeException(curClass.getFileName(), ex,
+//                                    String.format("Operator '%s' cannot be applied to '%s', '%s'",
+//                                            binEx.getOp().getType(),
+//                                            l.getCanonicalName(),
+//                                            r.getCanonicalName()));
+//                        }
+//                        return BaseEnvironment.TYPE_INT;
+//                    case MINUS:
+//                    case STAR:
+//                    case MOD:
+//                    case FSLASH:
+//                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
+//                            throw new TypeException(curClass.getFileName(), ex,
+//                                    String.format("Operator '%s' cannot be applied to '%s', '%s'",
+//                                            binEx.getOp().getType(),
+//                                            l.getCanonicalName(),
+//                                            r.getCanonicalName()));
+//                        }
+//                        return BaseEnvironment.TYPE_INT;
+//                    case INSTANCEOF:
+//                        if (l.isSimple()) {
+//                            throw new InconvertibleTypeException(curClass.getFileName(), ex, l, r);
+//                        }
+//                        return BaseEnvironment.TYPE_BOOLEAN;
+//                    default:
+//                        throw new RuntimeException(
+//                                String.format("Error. Name resolver does not support the '%s' operator",
+//                                        binEx.getOp().getType()));
+//                }
+//            }
+//            case Expression.ICREATION_EXPRESSION: {
+//                ICreationExpression instanceCreation = (ICreationExpression) ex;
+//                Class type = resolveExpression(instanceCreation.getType(), env);
+//
+//                if (Modifier.isAbstract(type.getModifiers())) {
+//                    throw new TypeException(curClass.getFileName(), instanceCreation,
+//                            String.format("'%s' is abstract; cannot be instantiated",
+//                                    type.getName()));
+//                }
+//
+//                List<Class> argTypes = new ArrayList<>();
+//                for (Expression expr : instanceCreation.getArgList()) {
+//                    argTypes.add(resolveExpression(expr, env));
+//                }
+//                String constructorSig = Constructor.getConstructorSignature(type.getName(), argTypes);
+//                Constructor c = (Constructor) type.get(constructorSig);
+//                if (c == null) {
+//                    throw new NameResolutionException(curClass.getFileName(), instanceCreation,
+//                            String.format("No constructor found in '%s' that matches '%s'", type.getName(),
+//                                    constructorSig));
+//                }
+//                ensureCorrectAccess(c);
+//                inStaticContext = false;
+//                return type;
+//            }
+            case Expression.LITERAL_EXPRESSION: {
+                LiteralExpression literalExpression = (LiteralExpression) ex;
+                if (literalExpression.getLiteral().getType() == Token.Type.SEMI) return Register.EAX;
+                Literal lit = literalExpression.getProper();
+                Register toUse = Register.EAX;
+                switch (lit.getTokenType()) {
+                    case STRINGLIT:
+                        // TODO
+                        break;
+                    case CHARLIT:
+                        curSrc.mov(toUse, (char)lit.getValue());
+                        break;
+                    case INTLIT:
+                        curSrc.mov(toUse, (int)lit.getValue());
+                        break;
+                    case FALSE:
+                        curSrc.mov(toUse, 0);
+                        break;
+                    case TRUE:
+                        curSrc.mov(toUse, 1);
+                        break;
+                    case NULL:
+                        curSrc.mov(toUse, 0);
+                        break;
+                }
+                return toUse;
+            }
+//            case Expression.METHOD_EXPRESSION: {
+//                MethodExpression meth = (MethodExpression) ex;
+//                Expression e = meth.getPrefixExpression();
+//                List<Class> argTypes = new ArrayList<>();
+//                boolean b = inStaticContext;
+//                for (Expression expr : meth.getArgList()) {
+//                    argTypes.add(resolveExpression(expr, env));
+//                    inStaticContext = b;
+//                }
+//                String methSig = Method.getMethodSignature(meth.getMethodName(), argTypes);
+//                Method m;
+//
+//                if (e != null) {
+//                    Class type;
+//                    boolean methodAccessFromVariable = true;
+//                    boolean staticContext = false;
+//                    if (e.getExpressionType() == Expression.TYPE_OR_VARIABLE_EXPRESSION) {
+//                        Object o = getFieldOrType((TypeOrVariableExpression) e, env);
+//                        if (o instanceof Class) {
+//                            type = (Class) o;
+//                            methodAccessFromVariable = false;
+//                            staticContext = true;
+//                        } else {
+//                            type = ((Field)o).getType();
+//                        }
+//                    } else {
+//                        type = resolveExpression(e, env);
+//                    }
+//
+//                    m = type.getEnvironment().lookupMethod(methSig);
+//                    if (Modifier.isProtected(m.getModifiers()) && !curClass.isSubClassOf(m.getDeclaringClass())) {
+//                        throw new TypeException(curClass.getFileName(), lastNode,
+//                                String.format("'%s' has protected access in '%s'",
+//                                        m.getName(), m.getDeclaringClass()));
+//                    } else if (Modifier.isProtected(m.getModifiers()) && methodAccessFromVariable && !type.isSubClassOf(curClass)
+//                            && type.getPackage() != curClass.getPackage()) {
+//                        throw new TypeException(curClass.getFileName(), lastNode,
+//                                String.format("'%s' has protected access in '%s'",
+//                                        m.getName(), m.getDeclaringClass()));
+//                    }
+//
+//                    if (staticContext) {
+//                        if (!Modifier.isStatic(m.getModifiers())) {
+//                            throw new EnvironmentException("Non static method referenced from static context",
+//                                    EnvironmentException.ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT,
+//                                    m);
+//                        }
+//                    } else {
+//                        if (Modifier.isStatic(m.getModifiers())) {
+//                            throw new EnvironmentException("Static method referenced from non static context",
+//                                    EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
+//                                    m);
+//                        }
+//                    }
+//                } else {
+//                    m = env.lookupMethod(methSig);
+//
+//                    if (inStaticContext) {
+//
+//                        if (!Modifier.isStatic(m.getModifiers())) {
+//                            throw new EnvironmentException("Static method referenced from non static context",
+//                                    EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
+//                                    m);
+//                        }
+//                    }
+//                    if (Modifier.isStatic(m.getModifiers())) {
+//                        throw new TypeException(curClass.getFileName(), meth,
+//                                String.format("Static method '%s' cannot be referenced from non-static context",
+//                                        m.getName()));
+//                    }
+//                }
+//                if (!inStaticContext) {
+//                    if (Modifier.isStatic(m.getModifiers())) {
+//                        throw new EnvironmentException("Static method referenced from non static context",
+//                                EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
+//                                m);
+//                    }
+//                }
+//                return m.getReturnType();
+//            }
+//            case Expression.REFERENCE_TYPE: {
+//                ReferenceType refType = (ReferenceType) ex;
+//                Class type = env.lookupClazz(refType);
+//                refType.setProper(type);
+//                return type;
+//            }
+//            case Expression.THIS_EXPRESSION: {
+//                if (inStaticContext) {
+//                    throw new TypeException(curClass.getFileName(), ex,
+//                            String.format("'%s' cannot be referenced from a static context",
+//                                    curClass.getCanonicalName() + ".this"));
+//                }
+//                return curClass;
+//            }
+//            case Expression.UNARY_EXPRESSION: {
+//                UnaryExpression unary = (UnaryExpression) ex;
+//                Class k = resolveExpression(unary.getExpression(), env);
+//                if (unary instanceof CastExpression) {
+//                    Class castType = env.lookupClazz(((CastExpression) unary).getCast());
+//                    if (!Class.isValidCast(castType, k)) {
+//                        throw new InconvertibleTypeException(curClass.getFileName(), unary,
+//                                castType, k);
+//                    }
+//                    return castType;
+//                }
+//
+//                switch (unary.getOp().getType()) {
+//                    case NOT:
+//                        if (k != BaseEnvironment.TYPE_BOOLEAN) {
+//                            throw new TypeException(curClass.getFileName(), unary,
+//                                    String.format("Operator '!' cannot be applied to '%s'", k.getName()));
+//                        }
+//                        return BaseEnvironment.TYPE_BOOLEAN;
+//                    case MINUS:
+//                        if (Class.getCategory(k) != Class.CATEGORY_NUMBER) {
+//                            throw new TypeException(curClass.getFileName(), unary,
+//                                    String.format("Operator '-' cannot be applied to '%s'", k.getName()));
+//                        }
+//                        return k;
+//                    default:
+//                        throw new RuntimeException(
+//                                String.format("Error. Name resolver does not support the unary '%s' operator",
+//                                        unary.getOp().getType()));
+//                }
+//            }
+            case Expression.VARIABLE_EXPRESSION: {
+                VariableExpression varExpr = (VariableExpression) ex;
+                List<Field> fields = varExpr.getProper();
+                for (Field f : fields) {
+                    if (Modifier.isStatic(f.getModifiers())) {
+                        curSrc.linkLabel(f.getUniqueName());
+                        curSrc.mov(Register.EAX, "dword [" + f.getUniqueName() + "]");
+                    } else {
+                        // TODO
+                    }
+                }
+                return Register.EAX;
+            }
+//            default:
+//                throw new RuntimeException(
+//                        String.format("Error. Name resolver does not support the expression type '%s'",
+//                                ex.getClass().getSimpleName()));
+        }
+
+        return Register.EAX;
+    }
+
+    private void declareAllStaticFields(Class c) {
+        curSrc.setActiveSectionId(Section.BSS);
+
+        for (Field f : c.getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers())) {
+                curSrc.resd(f.getUniqueName());
+            }
         }
     }
 }
