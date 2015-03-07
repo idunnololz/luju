@@ -38,4 +38,13 @@ public enum Register {
     public static Register getNextRegisterFrom(Register r) {
         return intToTypeMap.get((r.getValue() + 1) % 4);
     }
+
+    public static Register getNextRegisterFrom(RegisterExpression re) {
+        int i = 0;
+        Register r;
+        while (re.isRegisterUsed(r = intToTypeMap.get(i))) {
+            i = (i + 1) % 4;
+        }
+        return r;
+    }
 }

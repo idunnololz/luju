@@ -12,6 +12,9 @@ import java.util.List;
 public class Method {
     private static final HashMap<String, Integer> nameCount = new HashMap<>();
 
+    private Method overrideMethod;
+    private int methodIndex = -1;
+
     private final Class declaringClass;
     private final MethodDecl methodDecl;
     private String name;
@@ -49,17 +52,14 @@ public class Method {
 
         modifiers = methodDecl.getModifiers();
 
-        generateUniqueName();
+        uniqueName = generateUniqueName(name);
     }
 
-    private void generateUniqueName() {
+    protected static String generateUniqueName(String name) {
         int count = MapUtils.getOrDefault(nameCount, name, 0);
-        if (count++ != 0) {
-            uniqueName = "?" + name + "@" + count;
-        } else {
-            uniqueName = "?" + name;
-        }
+        String uniqueName = "_" + name + "@" + count++;
         nameCount.put(name, count);
+        return uniqueName;
     }
 
     public String getUniqueName() {
@@ -134,5 +134,21 @@ public class Method {
 
     public Class[] getParameterTypes() {
         return parameterTypes;
+    }
+
+    public Method getOverrideMethod() {
+        return overrideMethod;
+    }
+
+    public void setOverrideMethod(Method overrideMethod) {
+        this.overrideMethod = overrideMethod;
+    }
+
+    public int getMethodIndex() {
+        return methodIndex;
+    }
+
+    public void setMethodIndex(int methodIndex) {
+        this.methodIndex = methodIndex;
     }
 }

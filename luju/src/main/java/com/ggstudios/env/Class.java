@@ -5,6 +5,7 @@ import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.types.ClassDecl;
 import com.ggstudios.types.TypeDecl;
 import com.ggstudios.utils.MapUtils;
+import com.ggstudios.utils.Print;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,6 +20,7 @@ public class Class extends HashMap<String, Object> {
 
     private List<Method> declaredMethods = new ArrayList<>();
     private List<Field> declaredFields = new ArrayList<>();
+    private List<Constructor> declaredConstructors = new ArrayList<>();
 
     private Package thisPackage;
     private int modifiers;
@@ -36,6 +38,8 @@ public class Class extends HashMap<String, Object> {
 
     private static int LAST_ID = 0;
     private final int id;
+
+    private int numUniqueMethods; // does not include overriden methods
 
     protected Class() {
         id = -1;
@@ -120,6 +124,7 @@ public class Class extends HashMap<String, Object> {
                     String.format("'%s' is already defined in '%s'", constructor.getHumanReadableSignature(), getCanonicalName()));
         }
         put(constructor.getConstructorSignature(), constructor);
+        declaredConstructors.add(constructor);
     }
 
     public Class getSuperClass() {
@@ -325,26 +330,61 @@ public class Class extends HashMap<String, Object> {
         return declaredFields;
     }
 
+    public List<Constructor> getDeclaredConstructors() {
+        return declaredConstructors;
+    }
+
+    public int getNumUniqueNonStaticMethods() {
+        return numUniqueMethods;
+    }
+
+    public void setNumUniqueMethods(int numUniqueMethods) {
+        this.numUniqueMethods = numUniqueMethods;
+    }
+
     private List<Field> completeFieldList;
+    private LinkedList<Field> completeNonStaticFields;
     private Map<Field, Integer> fieldToIndex;
 
     private List<Method> completeMethodList;
+    private ArrayList<Method> completeNonStaticMethods;
 
     private String vtableLabel;
 
+    private boolean codeGenInfoGenerated = false;
+
     public void generateDataForCodeGeneration() {
+        if (codeGenInfoGenerated) return;
+
+        int methods = getNumUniqueNonStaticMethods();
+
         LinkedList<Field> fieldList = new LinkedList<>();
         LinkedList<Method> methodList = new LinkedList<>();
+        completeNonStaticFields = new LinkedList<>();
+        completeNonStaticMethods = new ArrayList<>(methods);
+
+        for (int i = 0; i < methods; i++) {
+            completeNonStaticMethods.add(null);
+        }
+
 
         fieldToIndex = new HashMap<>();
         Class thisClass = this;
         do {
             for (Field f : thisClass.getDeclaredFields()) {
-                fieldToIndex.put(f, fieldList.size());
                 fieldList.addFirst(f);
+
+                if (!Modifier.isStatic(f.getModifiers())) {
+                    fieldToIndex.put(f, completeNonStaticFields.size());
+                    completeNonStaticFields.addFirst(f);
+                }
             }
             for (Method m : thisClass.getDeclaredMethods()) {
                 methodList.addFirst(env.lookupMethod(m.getMethodSignature()));
+
+                if (!Modifier.isStatic(m.getModifiers())) {
+                    completeNonStaticMethods.set(m.getMethodIndex(), m);
+                }
             }
         } while ((thisClass = thisClass.getSuperClass()) != null);
 
@@ -352,17 +392,40 @@ public class Class extends HashMap<String, Object> {
         completeMethodList = methodList;
 
         vtableLabel = getCanonicalName() + "$vt";
+        codeGenInfoGenerated = true;
+    }
+
+    public int getFieldIndex(Field f) {
+        generateDataForCodeGeneration();
+        Integer i;
+        if ((i = fieldToIndex.get(f)) == null) {
+            throw new RuntimeException("Field " + f.getName() + " index not found in class " + getCanonicalName());
+        }
+        return i;
+    }
+
+    public List<Field> getCompleteNonStaticFields() {
+        generateDataForCodeGeneration();
+        return completeNonStaticFields;
     }
 
     public List<Field> getCompleteFieldList() {
+        generateDataForCodeGeneration();
         return completeFieldList;
     }
 
     public String getVtableLabel() {
+        generateDataForCodeGeneration();
         return vtableLabel;
     }
 
     public List<Method> getCompleteMethodList() {
+        generateDataForCodeGeneration();
         return completeMethodList;
+    }
+
+    public List<Method> getCompleteNonStaticMethodList() {
+        generateDataForCodeGeneration();
+        return completeNonStaticMethods;
     }
 }

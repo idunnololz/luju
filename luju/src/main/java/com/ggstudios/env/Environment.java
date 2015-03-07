@@ -9,7 +9,7 @@ import java.util.List;
 public abstract class Environment {
     protected static boolean inStaticMode = false;
     protected static boolean allowNonStatic = true;
-    protected static boolean noStaticMode = false;
+    protected static boolean strictStaticMode = false;
     protected static boolean allowProtected = true;
     protected static WarningResolver resolver;
 
@@ -55,12 +55,18 @@ public abstract class Environment {
         inStaticMode = mode;
     }
 
-    public static void setNoStaticMode(boolean noStaticMode) {
-        Environment.noStaticMode = noStaticMode;
+    /**
+     * Strict static mode means that an exception will be thrown if either:
+     * a) we are in a static context and we access a non static variable
+     * b) we are not in a static context and we access a static variable
+     * @param strictStaticMode
+     */
+    public static void setStrictStaticMode(boolean strictStaticMode) {
+        Environment.strictStaticMode = strictStaticMode;
     }
 
-    public static boolean isNoStaticMode() {
-        return noStaticMode;
+    public static boolean isStrictStaticMode() {
+        return strictStaticMode;
     }
 
     public abstract LookupResult lookup(String[] name);

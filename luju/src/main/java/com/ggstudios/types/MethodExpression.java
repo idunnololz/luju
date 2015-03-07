@@ -30,7 +30,7 @@ public class MethodExpression extends Expression {
         sb.append("(");
         if (!argList.isEmpty()) {
             for (Expression a : argList) {
-                sb.append(a.toString());
+                sb.append(a.toString().replace("\n", "\\n"));
                 sb.append(", ");
             }
             sb.setLength(sb.length() - 2);

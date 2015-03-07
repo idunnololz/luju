@@ -254,7 +254,8 @@ public class NameResolver {
                     for (VarDecl vd : cd.getArguments()) {
                         try {
                             lastNode = vd;
-                            Variable v = new Variable(cd.getProper(), vd, curEnv);
+                            Variable v = new Variable(cd.getCProper(), vd, curEnv);
+                            vd.setProper(v);
                             v.setInitialized(true);
                             curEnv = new LocalVariableEnvironment(v.getName(), v, curEnv);
                         } catch (EnvironmentException e) {
@@ -310,6 +311,7 @@ public class NameResolver {
                     try {
                         lastNode = vd;
                         Variable v = new Variable(meth.getProper(), vd, curEnv);
+                        vd.setProper(v);
                         v.setInitialized(true);
                         curEnv = new LocalVariableEnvironment(v.getName(), v, curEnv);
                     } catch (EnvironmentException e) {
@@ -347,6 +349,7 @@ public class NameResolver {
     }
 
     private Environment resolveStatement(Statement s, Environment env) {
+        boolean t = inStaticContext;
         switch (s.getStatementType()) {
             case Statement.TYPE_BLOCK: {
                 Block b = (Block) s;
@@ -452,7 +455,7 @@ public class NameResolver {
                 VarDecl vd = (VarDecl) s;
                 staticAnalyzer.analyzeReachability(vd);
 
-                Variable var = new Variable(null, vd, env);
+                Variable var = new Variable(curMethod, vd, env);
                 env = new LocalVariableEnvironment(var.getName(), var, env);
                 if (vd instanceof VarInitDecl) {
                     VarInitDecl vid = (VarInitDecl) vd;
@@ -464,6 +467,7 @@ public class NameResolver {
 
                     var.setInitialized(true);
                 }
+                vd.setProper(var);
                 break;
             }
             case Statement.TYPE_WHILE: {
@@ -483,6 +487,7 @@ public class NameResolver {
                 break;
             }
         }
+        inStaticContext = t;
         return env;
     }
 
@@ -556,8 +561,12 @@ public class NameResolver {
                         throw new RuntimeException("wtf...did not see dis coming...");
                 }
 
+                boolean b = inStaticContext;
                 Class lhsType = resolveExpression(lhsExpr, env);
+                inStaticContext = b;
                 Class rhsType = resolveExpression(assign.getRhs(), env);
+                inStaticContext = b;
+
                 if (!Class.isValidAssign(lhsType, rhsType)) {
                     throw new IncompatibleTypeException(curClass.getFileName(), ex,
                             lhsType, rhsType);
@@ -566,8 +575,12 @@ public class NameResolver {
             }
             case Expression.BINARY_EXPRESSION: {
                 BinaryExpression binEx = (BinaryExpression) ex;
+                boolean b = inStaticContext;
                 Class l = resolveExpression(binEx.getLeftExpr(),  env);
+                inStaticContext = b;
                 Class r = resolveExpression(binEx.getRightExpr(),  env);
+                inStaticContext = b;
+
                 switch (binEx.getOp().getType()) {
                     case LT:
                     case LT_EQ:
@@ -658,6 +671,7 @@ public class NameResolver {
                             String.format("No constructor found in '%s' that matches '%s'", type.getName(),
                                     constructorSig));
                 }
+                instanceCreation.setProper(c);
                 ensureCorrectAccess(c);
                 inStaticContext = false;
                 return type;
@@ -699,7 +713,7 @@ public class NameResolver {
                     }
 
                     m = type.getEnvironment().lookupMethod(methSig);
-                    if (Modifier.isProtected(m.getModifiers()) && !curClass.isSubClassOf(m.getDeclaringClass())) {
+                        if (Modifier.isProtected(m.getModifiers()) && !curClass.isSubClassOf(m.getDeclaringClass())) {
                         throw new TypeException(curClass.getFileName(), lastNode,
                                 String.format("'%s' has protected access in '%s'",
                                         m.getName(), m.getDeclaringClass()));
@@ -797,17 +811,22 @@ public class NameResolver {
             case Expression.VARIABLE_EXPRESSION: {
                 VariableExpression varExpr = (VariableExpression) ex;
                 Field f;
+
+                Environment.setStrictStaticMode(true);
                 if (inStaticContext) {
                     f = getFieldFromVariableExpression(varExpr, env);
                 } else {
-                    Environment.setNoStaticMode(true);
                     f = getFieldFromVariableExpression(varExpr, env);
-                    Environment.setNoStaticMode(false);
                 }
+                Environment.setStrictStaticMode(false);
+
                 List<Field> lookupTrace = new ArrayList<>(Environment.getLookupTrace());
                 lookupTrace.add(f);
 
                 varExpr.setProper(lookupTrace);
+
+                inStaticContext = false;
+
                 return f.getType();
             }
             default:
@@ -870,7 +889,13 @@ public class NameResolver {
             NameVariable nVar = (NameVariable) varExpr;
             String varName = nVar.getName();
             if (checkingFields) {
+                if (inStaticContext) {
+                    Environment.setStaticMode(true);
+                }
                 LookupResult r = env.lookupName(new String[]{nVar.getId().getRaw()});
+                if (inStaticContext) {
+                    Environment.setStaticMode(false);
+                }
                 if (r != null && r.result instanceof Field) {
                     Field field = (Field) r.result;
                     ensureValidReference(curField, field);
@@ -979,7 +1004,9 @@ public class NameResolver {
 
             for (ConstructorDecl cd : clazz.getConstructorDeclaration()) {
                 try {
-                    c.putConstructor(new Constructor(c, cd, env));
+                    Constructor constructor = new Constructor(c, cd, env);
+                    c.putConstructor(constructor);
+                    cd.setCProper(constructor);
                 } catch (EnvironmentException e) {
                     throwNameResolutionException(e, curClass.getFileName(), cd);
                 }
@@ -1005,8 +1032,18 @@ public class NameResolver {
             toResolve.add(c);
         }
 
+        int objectMethods = 0;
         if (classes.size() != 0) {
             BaseEnvironment.TYPE_OBJECT.setIsComplete(true);
+
+            int i = 0;
+            for (Method m : BaseEnvironment.TYPE_OBJECT.getDeclaredMethods()) {
+                if (!Modifier.isStatic(m.getModifiers())) {
+                    m.setMethodIndex(i++);
+                }
+            }
+            BaseEnvironment.TYPE_OBJECT.setNumUniqueMethods(i);
+            objectMethods = i;
         }
 
         while (!toResolve.isEmpty()) {
@@ -1045,13 +1082,24 @@ public class NameResolver {
                 mergeClass(c, superClass);
             }
 
+            int nonStaticMethodCount = 0;
             for (Class i : interfaces) {
                 if (!i.isInterface()) {
                     throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
                             "Cannot extend class");
                 }
                 mergeClass(c, i);
+
+                nonStaticMethodCount += i.getNumUniqueNonStaticMethods() - objectMethods;
             }
+
+            int index = superClass.getNumUniqueNonStaticMethods();
+            for (Method m : c.getDeclaredMethods()) {
+                if (!Modifier.isStatic(m.getModifiers()) && m.getMethodIndex() == -1) {
+                    m.setMethodIndex(index++);
+                }
+            }
+            c.setNumUniqueMethods(index + nonStaticMethodCount);
 
             c.setIsComplete(true);
             toResolve.pop();
@@ -1108,6 +1156,9 @@ public class NameResolver {
                                         oldMeth.getHumanReadableSignature(),
                                         oldMeth.getDeclaringClass().getCanonicalName()));
                     }
+
+                    newMeth.setOverrideMethod(oldMeth);
+                    newMeth.setMethodIndex(oldMeth.getMethodIndex());
                 }
             } else {
                 if (val instanceof Method) {

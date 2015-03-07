@@ -16,7 +16,7 @@ public class TestSuite {
     private static final Main.ArgList defaultTestArgs = new Main.ArgList();
 
     public TestSuite() {
-        compiler = new LuJuCompiler(Main.ArgList.DEFAULT_THREADS);
+        compiler = new LuJuCompiler(Main.ArgList.DEFAULT_THREADS, defaultTestArgs.useCygwin);
         defaultTestArgs.useCache = true;
         try {
             addStdlib(defaultTestArgs);

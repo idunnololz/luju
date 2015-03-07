@@ -4,7 +4,9 @@ import com.ggstudios.error.EnvironmentException;
 import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.types.ConstructorDecl;
 import com.ggstudios.types.VarDecl;
+import com.ggstudios.utils.MapUtils;
 
+import java.util.HashMap;
 import java.util.List;
 
 public class Constructor {
@@ -16,6 +18,8 @@ public class Constructor {
 
     private String signature;
     private ConstructorDecl constructorDecl;
+
+    private String uniqueName;
 
     public Constructor(Class c, ConstructorDecl cd, Environment env) {
         declaringClass = c;
@@ -36,6 +40,12 @@ public class Constructor {
                         String.format("Cannot resolve symbol '%s'", a.getType().toString()));
             }
         }
+
+        uniqueName = Method.generateUniqueName("new" + name);
+    }
+
+    public String getUniqueName() {
+        return uniqueName;
     }
 
     public Class getDeclaringClass() {

@@ -22,8 +22,8 @@ public class Main {
                     //"-t",
                     //"-p",
                     //"-A",
-                    "-d", TEST_DIR + "Test2",
                     //"-a",
+                    "-d", TEST_DIR + "Test2",
                     //TEST_DIR + "A.java",
                     "-d", STDLIB_DIR + "2.0/java"
                     //TEST_DIR + "Test.java"
@@ -32,13 +32,13 @@ public class Main {
             a = args;
         }
 
-        handleArgs(a);
+        System.exit(handleArgs(a));
     }
 
-    private static void handleArgs(String[] args) {
+    private static int handleArgs(String[] args) {
         if (args.length == 0) {
             printUsage();
-            return;
+            return 0;
         }
 
         ArgList argList = new ArgList();
@@ -50,10 +50,13 @@ public class Main {
             if (flag.charAt(0) == '-') {
                 if (flag.length() != 2) {
                     printUsage();
-                    return;
+                    return 0;
                 }
                 char op = flag.charAt(1);
                 switch (op) {
+                    case 'C':
+                        argList.useCygwin = true;
+                        break;
                     case 'a':
                         argList.flags = argList.flags & ArgList.FLAG_ZERO_PHASE | ((ArgList.FLAG_ANALYZE << 1) - 1);
                         break;
@@ -109,20 +112,24 @@ public class Main {
 
         if (args.length != i) {
             printUsage();
-            return;
+            return 0;
         }
+
+        int result = 0;
 
         if (argList.isRunTests()) {
             TestSuite ts = new TestSuite();
             ts.runTests(argList);
         } else {
-            LuJuCompiler compiler = new LuJuCompiler(argList.maxThreads);
+            LuJuCompiler compiler = new LuJuCompiler(argList.maxThreads, argList.useCygwin);
             try {
-                compiler.compileWith(argList);
+                result = compiler.compileWith(argList);
             } finally {
                 compiler.shutdown();
             }
         }
+
+        return result;
     }
 
     private static void printUsage() {
@@ -145,6 +152,8 @@ public class Main {
         public static final int FLAG_RUN_TESTS          = 0x00040000;
         public static final int FLAG_PRINT_AST          = 0x00080000;
 
+        public boolean useCygwin = false;
+
         public int maxThreads = DEFAULT_THREADS;
 
         public List<String> fileNames = new ArrayList<>();
@@ -161,6 +170,7 @@ public class Main {
             flags = a.flags;
             assignmentNumber = a.assignmentNumber;
             useCache = a.useCache;
+            useCygwin = a.useCygwin;
         }
 
         public boolean isTokenizeEnabled() {

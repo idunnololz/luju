@@ -45,4 +45,10 @@ public class AstNode {
         toPrettyString(sb, 0);
         return sb;
     }
+
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        toPrettyString(sb, 0);
+        return sb.toString();
+    }
 }

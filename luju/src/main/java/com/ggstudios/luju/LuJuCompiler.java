@@ -38,7 +38,7 @@ public class LuJuCompiler {
     private ExecutorService executor;
     private WorkerPool workerPool;
 
-    public LuJuCompiler(int maxThreads) {
+    public LuJuCompiler(int maxThreads, boolean useCygwin) {
         executor = Executors.newFixedThreadPool(maxThreads);
         workerPool = new WorkerPool(maxThreads * 2);
 
@@ -46,7 +46,7 @@ public class LuJuCompiler {
         Assembler.Builder builder = new Assembler.Builder();
         try {
             assembler = builder.setTargetOs(Assembler.Os.WINDOWS)
-                    .setUseCygwin(true, "C:\\cygwin64\\bin\\bash.exe")
+                    .setUseCygwin(useCygwin, "C:\\cygwin64\\bin\\bash.exe")
                     .build();
         } catch (IOException e) {
             e.printStackTrace();

@@ -1,5 +1,7 @@
 package com.ggstudios.types;
 
+import com.ggstudios.env.Constructor;
+
 import java.util.List;
 
 /**
@@ -9,6 +11,7 @@ import java.util.List;
 public class ICreationExpression extends Expression {
     private ReferenceType type;
     private List<Expression> argList;
+    private Constructor proper;
 
     public ICreationExpression() {
         setType(ICREATION_EXPRESSION);
@@ -28,5 +31,13 @@ public class ICreationExpression extends Expression {
 
     public void setType(ReferenceType type) {
         this.type = type;
+    }
+
+    public void setProper(Constructor proper) {
+        this.proper = proper;
+    }
+
+    public Constructor getProper() {
+        return proper;
     }
 }

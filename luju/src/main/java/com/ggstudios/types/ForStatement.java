@@ -70,4 +70,24 @@ public class ForStatement extends Statement {
             body.toPrettyString(sb, level + 1);
         }
     }
+
+    public String toPrettyStringNoNewLine() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("for (");
+        if (forInit != null) {
+            forInit.toPrettyString(sb, 0);
+        }
+        sb.append(";");
+        if (condition != null) {
+            sb.append(' ');
+            sb.append(condition.toString());
+        }
+        sb.append(";");
+        if (forUpdate != null) {
+            sb.append(' ');
+            sb.append(forUpdate.toString());
+        }
+        sb.append(")");
+        return sb.toString();
+    }
 }

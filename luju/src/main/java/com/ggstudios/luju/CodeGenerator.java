@@ -1,45 +1,60 @@
 package com.ggstudios.luju;
 
 import com.ggstudios.asm.IntermediateSource;
+import com.ggstudios.asm.Operator;
 import com.ggstudios.asm.Register;
+import com.ggstudios.asm.RegisterExpression;
 import com.ggstudios.asm.Section;
 import com.ggstudios.env.BaseEnvironment;
 import com.ggstudios.env.Class;
-import com.ggstudios.env.Environment;
+import com.ggstudios.env.Constructor;
 import com.ggstudios.env.Field;
 import com.ggstudios.env.Literal;
-import com.ggstudios.env.LocalVariableEnvironment;
 import com.ggstudios.env.Method;
 import com.ggstudios.env.Modifier;
 import com.ggstudios.env.Variable;
-import com.ggstudios.error.IncompatibleTypeException;
-import com.ggstudios.error.TypeException;
 import com.ggstudios.types.ArrayAccessExpression;
 import com.ggstudios.types.ArrayCreationExpression;
+import com.ggstudios.types.AssignExpression;
+import com.ggstudios.types.BinaryExpression;
 import com.ggstudios.types.Block;
+import com.ggstudios.types.CastExpression;
+import com.ggstudios.types.ConstructorDecl;
 import com.ggstudios.types.Expression;
 import com.ggstudios.types.ExpressionStatement;
+import com.ggstudios.types.FieldVariable;
 import com.ggstudios.types.ForStatement;
+import com.ggstudios.types.ICreationExpression;
 import com.ggstudios.types.IfStatement;
 import com.ggstudios.types.LiteralExpression;
 import com.ggstudios.types.MethodDecl;
+import com.ggstudios.types.NameVariable;
 import com.ggstudios.types.ReturnStatement;
 import com.ggstudios.types.Statement;
+import com.ggstudios.types.UnaryExpression;
 import com.ggstudios.types.VarDecl;
 import com.ggstudios.types.VarInitDecl;
 import com.ggstudios.types.VariableExpression;
 import com.ggstudios.types.WhileStatement;
 import com.ggstudios.utils.FileUtils;
+import com.ggstudios.utils.ListUtils;
+import com.ggstudios.utils.Print;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
+import java.util.Stack;
 
 public class CodeGenerator {
     private static final String OUTPUT_DIRECTORY = "output";
+    private static final String OBJECT_INSTANCE_INIT_LABEL = "..@init";
 
     private static final int POINTER_SIZE = 4; // in bytes
+    private static final int OBJECT_OVERHEAD = 2; // in bytes
+    private static final int OBJECT_OVERHEAD_BYTES = OBJECT_OVERHEAD * 4; // in bytes
 
     private boolean comment = true;
 
@@ -121,9 +136,12 @@ public class CodeGenerator {
      * class name) will still be named a.b.C in the assembly. Note that the default package has name
      * '@default'.
      *
-     * Methods names will have the form _methodName[@version]. For instance, if class C has a method
-     * named 'a', the method will have label '_a'. If another method also has the name 'a' or if 'a'
+     * Method names will have the form _methodName@version. For instance, if class C has a method
+     * named 'a', the method will have label '_a@1'. If another method also has the name 'a' or if 'a'
      * is overloaded, '_a@2' will be used and so on.
+     *
+     * Constructor names will have the form _newConstructorName@version. For instance, if class C
+     * has two constructors, the first constructor will have label '_newC@1' and the second '_newC@2'
      *
      * Field names will have the form ?fieldName[@verion]. For instance if class C has field 'b',
      * the field will have label '?b'.
@@ -142,7 +160,6 @@ public class CodeGenerator {
         for (Class c : declaredClasses) {
             // Before we begin, ask the class to pre generate some information that will be useful
             // to us in code generation...
-            c.generateDataForCodeGeneration();
 
             IntermediateSource src = sources[c.getId()];
             curSrc = src;
@@ -151,6 +168,11 @@ public class CodeGenerator {
             generateStaticClassData(c);
             declareAllStaticFields(c);
             generateStaticInitCode(c);
+            generateInstanceInitCode(c);
+
+            for (Constructor constructor : c.getDeclaredConstructors()) {
+                generateCodeForConstructor(constructor);
+            }
 
             for (Method method : c.getDeclaredMethods()) {
                 // entry point looks like this: static int test()
@@ -164,10 +186,37 @@ public class CodeGenerator {
                     generateCodeForMethod("_test", entryPoint);
 
                 } else {
-                    // TODO
+                    generateCodeForMethod(method.getUniqueName(), method);
                 }
             }
         }
+    }
+
+    private void generateCodeForConstructor(Constructor constructor) {
+        curSrc.glabel(constructor.getUniqueName());
+
+        ConstructorDecl cd = constructor.getConstructorDecl();
+        Block b = cd.getBlock();
+
+        curSrc.resetBpOffset();
+        curSrc.push(Register.EBP);
+        curSrc.mov(Register.EBP, Register.ESP);
+
+        curSrc.call(OBJECT_INSTANCE_INIT_LABEL);
+
+        linkArgumentAddresses(true, cd.getArguments());
+        allocateSpaceForLocalVariables(b.getStatements());
+
+        for (Statement s : b.getStatements()) {
+            generateCodeForStatement(s);
+        }
+
+        RegisterExpression instanceAddr = new RegisterExpression();
+        instanceAddr.set(Register.EBP, Operator.PLUS, 8);
+
+        curSrc.mov(Register.EAX, "[" + instanceAddr.toString() + "]");
+
+        restoreStackAndReturn();
     }
 
     private void generateCodeForMethod(String methodLabel, Method method) {
@@ -176,18 +225,31 @@ public class CodeGenerator {
         MethodDecl md = method.getMethodDecl();
         Block b = md.getBlock();
 
+        curSrc.resetBpOffset();
         curSrc.push(Register.EBP);
         curSrc.mov(Register.EBP, Register.ESP);
 
-        for (Statement s : b.getStatements()) {
-            generateCodeForStatement(s);
+        linkArgumentAddresses(!Modifier.isStatic(method.getModifiers()), md.getArguments());
+
+        if (Modifier.isNative(method.getModifiers())) {
+            // TODO
+        } else {
+            allocateSpaceForLocalVariables(b.getStatements());
+
+            for (Statement s : b.getStatements()) {
+                generateCodeForStatement(s);
+            }
         }
 
         if (method.getReturnType() == BaseEnvironment.TYPE_VOID) {
-            curSrc.mov(Register.ESP, Register.EBP);
-            curSrc.pop(Register.EBP);
-            curSrc.ret();
+            restoreStackAndReturn();
         }
+    }
+
+    private void restoreStackAndReturn() {
+        curSrc.mov(Register.ESP, Register.EBP);
+        curSrc.pop(Register.EBP);
+        curSrc.ret();
     }
 
     private void generateStaticClassData(Class c) {
@@ -251,89 +313,145 @@ public class CodeGenerator {
         src.ret();
     }
 
+    private void generateInstanceInitCode(Class c) {
+        curSrc.setActiveSectionId(Section.TEXT);
+
+        curSrc.label(OBJECT_INSTANCE_INIT_LABEL);
+
+        // Address of instance is stored at ebp + 8
+        RegisterExpression instanceAddr = new RegisterExpression();
+        instanceAddr.set(Register.EBP, Operator.PLUS, 8);
+
+        curSrc.mov(Register.EAX, "[" + instanceAddr.toString() + "]");
+
+        StringBuilder sb = new StringBuilder();
+
+        for (Field f : c.getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers())) continue;
+
+            VarDecl vd = f.getVarDecl();
+
+            if (vd instanceof VarInitDecl) {
+                curSrc.push(Register.EAX);
+                VarInitDecl vid = (VarInitDecl) vd;
+
+                if (comment) {
+                    curSrc.addComment(vid.toPrettyString(sb).toString());
+                    sb.setLength(0);
+                }
+
+                Register r2 = generateCodeForExpression(vid.getExpr());
+                Register r1 = Register.getNextRegisterFrom(r2);
+                curSrc.pop(r1);
+
+                RegisterExpression re = getReForField(r1, f);
+
+                curSrc.movRef(re, r2);
+            } else {
+                RegisterExpression re = getReForField(Register.EAX, f);
+                curSrc.movRef(re, 0);
+            }
+        }
+        curSrc.ret();
+    }
+
     private void generateCodeForStatement(Statement s) {
         switch (s.getStatementType()) {
-//            case Statement.TYPE_BLOCK: {
-//                Block b = (Block) s;
-//                staticAnalyzer.analyzeReachability(b);
-//
-//                Environment oldEnv = env;
-//                for (Statement st : b.getStatements()) {
-//                    env = resolveStatement(st, env);
-//                }
-//                env = oldEnv;
-//                break;
-//            }
-//            case Statement.TYPE_EXPRESSION: {
-//                ExpressionStatement expr = (ExpressionStatement) s;
-//                staticAnalyzer.analyzeReachability(expr);
-//                resolveExpression(expr.getExpr(), env);
-//                break;
-//            }
-//            case Statement.TYPE_FOR: {
-//                ForStatement forStatement = (ForStatement) s;
-//                staticAnalyzer.analyzeReachability(forStatement);
-//
-//                staticAnalyzer.pushAndReset();
-//                Environment oldEnv = env;
-//                if (forStatement.getForInit() != null) {
-//                    env = resolveStatement(forStatement.getForInit(), env);
-//                }
-//                if (forStatement.getCondition() != null) {
-//                    Class type = resolveExpression(forStatement.getCondition(), env);
-//                    if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
-//                        throw new IncompatibleTypeException(curClass.getFileName(),
-//                                forStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
-//                    }
-//                }
-//                if (forStatement.getForUpdate() != null) {
-//                    resolveStatement(forStatement.getForUpdate(), env);
-//                }
-//                resolveStatement(forStatement.getBody(), env);
-//                env = oldEnv;
-//
-//                staticAnalyzer.popState();
-//                break;
-//            }
-//            case Statement.TYPE_IF: {
-//                IfStatement ifStatement = (IfStatement) s;
-//                staticAnalyzer.analyzeReachability(ifStatement);
-//
-//                boolean completeNormally = false;
-//                boolean returnOnAllCodePath = true;
-//
-//                for (IfStatement.IfBlock b : ifStatement.getIfBlocks()) {
-//                    staticAnalyzer.pushState();
-//                    resolveStatement(b, env);
-//                    completeNormally |= staticAnalyzer.isCompletedNormally();
-//                    returnOnAllCodePath &= staticAnalyzer.isReturnOnAllCodePath();
-//                    staticAnalyzer.popState();
-//                }
-//                if (ifStatement.getElseBlock() != null) {
-//                    staticAnalyzer.pushState();
-//                    resolveStatement(ifStatement.getElseBlock(), env);
-//                    completeNormally |= staticAnalyzer.isCompletedNormally();
-//                    returnOnAllCodePath &= staticAnalyzer.isReturnOnAllCodePath();
-//                    staticAnalyzer.popState();
-//                    staticAnalyzer.setCompletedNormally(completeNormally);
-//                    staticAnalyzer.setReturnOnAllCodePath(returnOnAllCodePath);
-//                }
-//                break;
-//            }
-//            case Statement.TYPE_IF_BLOCK: {
-//                IfStatement.IfBlock ifBlock = (IfStatement.IfBlock) s;
-//                staticAnalyzer.analyzeReachability(ifBlock);
-//
-//                Class type = resolveExpression(ifBlock.getCondition(), env);
-//                if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
-//                    throw new IncompatibleTypeException(curClass.getFileName(),
-//                            ifBlock.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
-//                }
-//                resolveStatement(ifBlock.getBody(), env);
-//                break;
-//            }
+            case Statement.TYPE_BLOCK: {
+                Block b = (Block) s;
+
+                for (Statement st : b.getStatements()) {
+                    generateCodeForStatement(st);
+                }
+                break;
+            }
+            case Statement.TYPE_EXPRESSION: {
+                ExpressionStatement expr = (ExpressionStatement) s;
+
+                if (comment) {
+                    curSrc.addComment(expr.getExpr().toString());
+                }
+
+                generateCodeForExpression(expr.getExpr());
+                break;
+            }
+            case Statement.TYPE_FOR: {
+                ForStatement forStatement = (ForStatement) s;
+
+                String label = curSrc.getFreshLabel();
+                String start = curSrc.getFreshLabel();
+                String exit = curSrc.getFreshLabel();
+
+                if (comment) {
+                    curSrc.addComment(forStatement.toPrettyStringNoNewLine());
+                }
+                if (forStatement.getForInit() != null) {
+                    generateCodeForStatement(forStatement.getForInit());
+                    curSrc.jmp(label);
+                }
+                curSrc.label(start);
+
+                if (forStatement.getBody() != null) {
+                    generateCodeForStatement(forStatement.getBody());
+                }
+
+                curSrc.label(label);
+                if (forStatement.getCondition() != null) {
+                    if (comment) {
+                        curSrc.addComment(forStatement.getCondition().toString());
+                    }
+
+                    Register r = generateCodeForExpression(forStatement.getCondition());
+                    curSrc.test(r, r);
+                    curSrc.je(exit);
+                }
+
+                if (forStatement.getForUpdate() != null) {
+                    generateCodeForStatement(forStatement.getForUpdate());
+                }
+
+                curSrc.jmp(start);
+                curSrc.label(exit);
+                break;
+            }
+            case Statement.TYPE_IF: {
+                IfStatement ifStatement = (IfStatement) s;
+
+                String exit = curSrc.getFreshLabel();
+
+                String next = null;
+                for (IfStatement.IfBlock b : ifStatement.getIfBlocks()) {
+                    if (comment) {
+                        if (next == null)
+                            curSrc.addComment(String.format("if (%s)", b.getCondition()));
+                        else
+                            curSrc.addComment(String.format("else if (%s)", b.getCondition()));
+                    }
+                    next = curSrc.getFreshLabel();
+
+                    Register r = generateCodeForExpression(b.getCondition());
+                    curSrc.test(r, r);
+                    curSrc.je(next);
+
+                    generateCodeForStatement(b.getBody());
+                    curSrc.jmp(exit);
+
+                    curSrc.label(next);
+                }
+                if (ifStatement.getElseBlock() != null) {
+                    curSrc.addComment("else");
+                    generateCodeForStatement(ifStatement.getElseBlock());
+                }
+                curSrc.label(exit);
+                break;
+            }
             case Statement.TYPE_RETURN: {
                 ReturnStatement returnStatement = (ReturnStatement) s;
+
+                if (comment) {
+                    curSrc.addComment(returnStatement.toString());
+                }
+
                 Expression e = returnStatement.getExpression();
                 Register r = generateCodeForExpression(e);
 
@@ -341,45 +459,60 @@ public class CodeGenerator {
                     curSrc.mov(Register.EAX, r);
                 }
 
-                curSrc.mov(Register.ESP, Register.EBP);
-                curSrc.pop(Register.EBP);
-                curSrc.ret();
+                restoreStackAndReturn();
                 break;
             }
-//            case Statement.TYPE_VARDECL: {
-//                VarDecl vd = (VarDecl) s;
-//                staticAnalyzer.analyzeReachability(vd);
-//
-//                Variable var = new Variable(null, vd, env);
-//                env = new LocalVariableEnvironment(var.getName(), var, env);
-//                if (vd instanceof VarInitDecl) {
-//                    VarInitDecl vid = (VarInitDecl) vd;
-//                    Class type = resolveExpression(vid.getExpr(), env);
-//                    if (!Class.isValidAssign(var.getType(), type)) {
-//                        throw new IncompatibleTypeException(curClass.getFileName(), vd,
-//                                var.getType(), type);
-//                    }
-//
-//                    var.setInitialized(true);
-//                }
-//                break;
-//            }
-//            case Statement.TYPE_WHILE: {
-//                WhileStatement whileStatement = (WhileStatement) s;
-//                staticAnalyzer.analyzeReachability(whileStatement);
-//
-//                Class type = resolveExpression(whileStatement.getCondition(), env);
-//                if (type != BaseEnvironment.TYPE_BOOLEAN && type != BaseEnvironment.TYPE_OBJECT_BOOLEAN) {
-//                    throw new IncompatibleTypeException(curClass.getFileName(),
-//                            whileStatement.getCondition(), BaseEnvironment.TYPE_BOOLEAN, type);
-//                }
-//                if (whileStatement.getBody() != null) {
-//                    staticAnalyzer.pushAndReset();
-//                    resolveStatement(whileStatement.getBody(), env);
-//                }
-//                staticAnalyzer.popState();
-//                break;
-//            }
+            case Statement.TYPE_VARDECL: {
+                VarInitDecl vd = (VarInitDecl) s;
+
+                Variable var = (Variable) vd.getProper();
+
+                if (comment) {
+                    curSrc.addComment(vd.toString());
+                }
+
+                Register r1 = generateCodeForExpression(vd.getExpr());
+                curSrc.movRef(var.getAddress(), r1);
+                break;
+            }
+            case Statement.TYPE_WHILE: {
+                WhileStatement ws = (WhileStatement) s;
+
+                if (comment) {
+                    curSrc.addComment(String.format("while (%s)", ws.getCondition()));
+                }
+
+                String start = curSrc.getFreshLabel();
+                String exit = curSrc.getFreshLabel();
+
+                curSrc.label(start);
+                Register r = generateCodeForExpression(ws.getCondition());
+                curSrc.test(r, r);
+                curSrc.je(exit);
+
+                generateCodeForStatement(ws.getBody());
+
+                curSrc.jmp(start);
+                curSrc.label(exit);
+                break;
+            }
+        }
+    }
+
+    private RegisterExpression generateAddressForExpression(Expression ex) {
+        switch (ex.getExpressionType()) {
+            case Expression.ARRAY_ACCESS_EXPRESSION: {
+                ArrayAccessExpression arrayAccess = (ArrayAccessExpression) ex;
+                return (RegisterExpression) generateCodeForArrayAccessExpression(arrayAccess, true);
+            }
+            case Expression.VARIABLE_EXPRESSION: {
+                VariableExpression varExpr = (VariableExpression) ex;
+                return (RegisterExpression) generateCodeForVariableExpression(varExpr, true);
+            }
+            default:
+                throw new RuntimeException(
+                        String.format("Error. Cannot generate code to get the address of an expression with type '%s'",
+                                ex.getClass().getSimpleName()));
         }
     }
 
@@ -387,16 +520,7 @@ public class CodeGenerator {
         switch (ex.getExpressionType()) {
             case Expression.ARRAY_ACCESS_EXPRESSION: {
                 ArrayAccessExpression arrayAccess = (ArrayAccessExpression) ex;
-                Register r = generateCodeForExpression(arrayAccess.getIndexExpr());
-                curSrc.push(r);
-                r = generateCodeForExpression(arrayAccess.getArrayExpr());
-                Register r2 = Register.getNextRegisterFrom(r);
-                curSrc.pop(r2);
-                curSrc.imul(r2, r2, POINTER_SIZE);
-                Register r3 = Register.getNextRegisterFrom(r2);
-
-                curSrc.mov(r3, String.format("dword [%s+%s]", r.getAsm(), r2.getAsm()));
-                return r3;
+                return (Register) generateCodeForArrayAccessExpression(arrayAccess, false);
             }
             case Expression.ARRAY_CREATION_EXPRESSION: {
                 ArrayCreationExpression arrayCreation = (ArrayCreationExpression) ex;
@@ -405,159 +529,182 @@ public class CodeGenerator {
                     curSrc.mov(Register.EAX, arraySize);
                 }
 
+                curSrc.mov(Register.EBX, Register.EAX);
+
                 curSrc.add(Register.EAX, 1);    // for the length variable...
                 curSrc.shl(Register.EAX, 2);
                 curSrc.call("__malloc");
 
+                curSrc.movRef(Register.EAX, Register.EBX);
+
                 return Register.EAX;
             }
-//            case Expression.ASSIGN_EXPRESSION: {
-//                AssignExpression assign = (AssignExpression) ex;
-//                Expression lhsExpr = assign.getLhs();
-//                if (checkingFields) {
-//                    if (lhsExpr.getExpressionType() == Expression.VARIABLE_EXPRESSION) {
-//                        VariableExpression varExpr = (VariableExpression) lhsExpr;
-//                        Field f = null;
-//                        if (varExpr instanceof FieldVariable) {
-//                            FieldVariable fVar = (FieldVariable) varExpr;
-//                            Class c = resolveExpression(fVar.getPrefixExpr(), env);
-//                            f = c.getEnvironment().lookupField(fVar.getFieldName());
-//                        } else if (varExpr instanceof NameVariable) {
-//                            NameVariable nVar = (NameVariable) varExpr;
-//                            f = env.lookupField(nVar.getName());
-//                        }
-//                        if (f.getDeclaringClass() == curClass) {
-//                            forgiveForwardUsage = true;
-//                        }
-//                    }
-//                }
-//
-//                switch (lhsExpr.getExpressionType()) {
-//                    case Expression.VARIABLE_EXPRESSION: {
-//                        boolean c = checkingFields;
-//                        checkingFields = false;
-//                        Field f = getFieldFromVariableExpression((VariableExpression) lhsExpr, env);
-//                        if (Modifier.isFinal(f.getModifiers())) {
-//                            throw new TypeException(curClass.getFileName(), lhsExpr,
-//                                    String.format(
-//                                            "Cannot assign a value to final variable '%s'",
-//                                            f.getName()));
-//                        }
-//                        checkingFields = c;
-//                        break;
-//                    }
-//                    case Expression.ARRAY_ACCESS_EXPRESSION:
-//                        break;
-//                    default:
-//                        throw new RuntimeException("wtf...did not see dis coming...");
-//                }
-//
-//                Class lhsType = resolveExpression(lhsExpr, env);
-//                Class rhsType = resolveExpression(assign.getRhs(), env);
-//                if (!Class.isValidAssign(lhsType, rhsType)) {
-//                    throw new IncompatibleTypeException(curClass.getFileName(), ex,
-//                            lhsType, rhsType);
-//                }
-//                return lhsType;
-//            }
-//            case Expression.BINARY_EXPRESSION: {
-//                BinaryExpression binEx = (BinaryExpression) ex;
-//                Class l = resolveExpression(binEx.getLeftExpr(),  env);
-//                Class r = resolveExpression(binEx.getRightExpr(),  env);
-//                switch (binEx.getOp().getType()) {
-//                    case LT:
-//                    case LT_EQ:
-//                    case GT:
-//                    case GT_EQ:
-//                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
-//                            throw new TypeException(curClass.getFileName(), ex,
-//                                    String.format("Operator '%s' cannot be applied to '%s', '%s'",
-//                                            binEx.getOp().getType(),
-//                                            l.getCanonicalName(),
-//                                            r.getCanonicalName()));
-//                        }
-//                        return BaseEnvironment.TYPE_BOOLEAN;
-//                    case PIPE:
-//                    case PIPE_PIPE:
-//                    case AMP:
-//                    case AMP_AMP:
-//                        if (l != BaseEnvironment.TYPE_BOOLEAN || r != BaseEnvironment.TYPE_BOOLEAN) {
-//                            throw new TypeException(curClass.getFileName(), ex,
-//                                    String.format("Operator '%s' cannot be applied to '%s', '%s'",
-//                                            binEx.getOp().getType(),
-//                                            l.getCanonicalName(),
-//                                            r.getCanonicalName()));
-//                        }
-//                        return BaseEnvironment.TYPE_BOOLEAN;
-//                    case EQ_EQ:
-//                    case NEQ:
-//                        if (!Class.isValidAssign(l, r) && !Class.isValidAssign(r, l)) {
-//                            throw new TypeException(curClass.getFileName(), ex,
-//                                    String.format("Invalid comparison made between type '%s' and '%s'",
-//                                            l.getCanonicalName(),
-//                                            r.getCanonicalName()));
-//                        }
-//                        return BaseEnvironment.TYPE_BOOLEAN;
-//                    case PLUS:
-//                        if ((l == BaseEnvironment.TYPE_STRING || r == BaseEnvironment.TYPE_STRING) &&
-//                                (l != BaseEnvironment.TYPE_VOID && r != BaseEnvironment.TYPE_VOID))
-//                            return BaseEnvironment.TYPE_STRING;
-//                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
-//                            throw new TypeException(curClass.getFileName(), ex,
-//                                    String.format("Operator '%s' cannot be applied to '%s', '%s'",
-//                                            binEx.getOp().getType(),
-//                                            l.getCanonicalName(),
-//                                            r.getCanonicalName()));
-//                        }
-//                        return BaseEnvironment.TYPE_INT;
-//                    case MINUS:
-//                    case STAR:
-//                    case MOD:
-//                    case FSLASH:
-//                        if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
-//                            throw new TypeException(curClass.getFileName(), ex,
-//                                    String.format("Operator '%s' cannot be applied to '%s', '%s'",
-//                                            binEx.getOp().getType(),
-//                                            l.getCanonicalName(),
-//                                            r.getCanonicalName()));
-//                        }
-//                        return BaseEnvironment.TYPE_INT;
-//                    case INSTANCEOF:
-//                        if (l.isSimple()) {
-//                            throw new InconvertibleTypeException(curClass.getFileName(), ex, l, r);
-//                        }
-//                        return BaseEnvironment.TYPE_BOOLEAN;
-//                    default:
-//                        throw new RuntimeException(
-//                                String.format("Error. Name resolver does not support the '%s' operator",
-//                                        binEx.getOp().getType()));
-//                }
-//            }
-//            case Expression.ICREATION_EXPRESSION: {
-//                ICreationExpression instanceCreation = (ICreationExpression) ex;
-//                Class type = resolveExpression(instanceCreation.getType(), env);
-//
-//                if (Modifier.isAbstract(type.getModifiers())) {
-//                    throw new TypeException(curClass.getFileName(), instanceCreation,
-//                            String.format("'%s' is abstract; cannot be instantiated",
-//                                    type.getName()));
-//                }
-//
-//                List<Class> argTypes = new ArrayList<>();
-//                for (Expression expr : instanceCreation.getArgList()) {
-//                    argTypes.add(resolveExpression(expr, env));
-//                }
-//                String constructorSig = Constructor.getConstructorSignature(type.getName(), argTypes);
-//                Constructor c = (Constructor) type.get(constructorSig);
-//                if (c == null) {
-//                    throw new NameResolutionException(curClass.getFileName(), instanceCreation,
-//                            String.format("No constructor found in '%s' that matches '%s'", type.getName(),
-//                                    constructorSig));
-//                }
-//                ensureCorrectAccess(c);
-//                inStaticContext = false;
-//                return type;
-//            }
+            case Expression.ASSIGN_EXPRESSION: {
+                AssignExpression assign = (AssignExpression) ex;
+                Register r2 = generateCodeForExpression(assign.getRhs());
+                curSrc.pushPoint();
+                curSrc.push(r2);
+                curSrc.record();
+                RegisterExpression r1 = generateAddressForExpression(assign.getLhs());
+                r2 = Register.getNextRegisterFrom(r1);
+                curSrc.stop();
+                curSrc.pop(r2);
+                curSrc.restorePointIfClean();
+
+                curSrc.movRef(r1, r2);
+
+                return r2;
+            }
+            case Expression.BINARY_EXPRESSION: {
+                BinaryExpression binEx = (BinaryExpression) ex;
+                Register r2 = generateCodeForExpression(binEx.getRightExpr());
+                curSrc.push(r2);
+                Register r1 = generateCodeForExpression(binEx.getLeftExpr());
+                if (r1 != Register.EAX) {
+                    curSrc.mov(Register.EAX, r1);
+                }
+                r2 = Register.EBX;
+                curSrc.pop(r2);
+                switch (binEx.getOp().getType()) {
+                    case LT:
+                    case LT_EQ:
+                    case GT:
+                    case GT_EQ: {
+                        String l1 = curSrc.getFreshLabel();
+                        String l2 = curSrc.getFreshLabel();
+                        curSrc.cmp(r1, r2);
+                        switch (binEx.getOp().getType()) {
+                            case LT:
+                                curSrc.jge(l1);
+                                break;
+                            case LT_EQ:
+                                curSrc.jg(l1);
+                                break;
+                            case GT:
+                                curSrc.jle(l1);
+                                break;
+                            case GT_EQ:
+                                curSrc.jl(l1);
+                                break;
+                        }
+                        curSrc.mov(Register.EAX, 1);
+                        curSrc.jmp(l2);
+                        curSrc.label(l1);
+                        curSrc.mov(Register.EAX, 0);
+                        curSrc.label(l2);
+                        return Register.EAX;
+                    }
+                    case PIPE:
+                        curSrc.or(r1, r2);
+                        return r1;
+                    case AMP:
+                        curSrc.and(r1, r2);
+                        return r1;
+                    case PIPE_PIPE: {
+                        String l1 = curSrc.getFreshLabel();
+                        String l2 = curSrc.getFreshLabel();
+
+                        curSrc.test(r1, r2);
+                        curSrc.jne(l1);
+                        curSrc.mov(Register.EAX, 0);
+                        curSrc.jmp(l2);
+                        curSrc.label(l1);
+                        curSrc.mov(Register.EAX, 1);
+                        curSrc.label(l2);
+
+                        return Register.EAX;
+                    }
+                    case AMP_AMP: {
+                        String l1 = curSrc.getFreshLabel();
+                        String l2 = curSrc.getFreshLabel();
+
+                        curSrc.test(r1, r2);
+                        curSrc.je(l1);
+                        curSrc.mov(Register.EAX, 1);
+                        curSrc.jmp(l2);
+                        curSrc.label(l1);
+                        curSrc.mov(Register.EAX, 0);
+                        curSrc.label(l2);
+
+                        return Register.EAX;
+                    }
+                    case EQ_EQ:
+                    case NEQ: {
+                        String l1 = curSrc.getFreshLabel();
+                        String l2 = curSrc.getFreshLabel();
+                        curSrc.cmp(r1, r2);
+                        if (binEx.getOp().getType() == Token.Type.NEQ) {
+                            curSrc.je(l1);
+                        } else {
+                            curSrc.jne(l1);
+                        }
+                        curSrc.mov(Register.EAX, 1);
+                        curSrc.jmp(l2);
+                        curSrc.label(l1);
+                        curSrc.mov(Register.EAX, 0);
+                        curSrc.label(l2);
+
+                        return Register.EAX;
+                    }
+                    case PLUS:
+                        // TODO handle string concat
+                        curSrc.add(r1, r2);
+                        return r1;
+                    case MINUS:
+                        curSrc.sub(r1, r2);
+                        return r1;
+                    case STAR:
+                        curSrc.imul(r1, r2);
+                        return r1;
+                    case MOD:
+                        curSrc.cdq();
+                        curSrc.idiv(r2);
+                        return Register.EDX;
+                    case FSLASH:
+                        curSrc.cdq();
+                        curSrc.idiv(r2);
+                        return r1;
+                    case INSTANCEOF:
+                        // TODO
+                        return Register.EAX;
+                    default:
+                        throw new RuntimeException(
+                                String.format("Error. Name resolver does not support the '%s' operator",
+                                        binEx.getOp().getType()));
+                }
+            }
+            case Expression.ICREATION_EXPRESSION: {
+                ICreationExpression instanceCreation = (ICreationExpression) ex;
+
+                // Class memory structure:
+                // <cptr> -> class_info_table
+                // <vptr> -> vtable [+offset]
+                // [non-static-fields]
+
+                Class c = instanceCreation.getType().getProper();
+
+                Constructor constructor = instanceCreation.getProper();
+
+                List<Expression> args = instanceCreation.getArgList();
+                for (Expression arg : ListUtils.reverse(args)) {
+                    // since we can only store two args in registers, push the rest...
+                    // we need to reserve EAX for the address of the object
+                    Register r = generateCodeForExpression(arg);
+
+                    curSrc.push(r);
+                }
+
+                int fields = c.getCompleteNonStaticFields().size();
+
+                curSrc.mov(Register.EAX, fields + 2);
+                curSrc.shl(Register.EAX, 2);
+                curSrc.call("__malloc");
+                curSrc.push(Register.EAX);
+                curSrc.call(constructor.getUniqueName());
+                int argsCount = args.size() + 1;
+                curSrc.add(Register.ESP, argsCount * 4);
+                return Register.EAX;
+            }
             case Expression.LITERAL_EXPRESSION: {
                 LiteralExpression literalExpression = (LiteralExpression) ex;
                 if (literalExpression.getLiteral().getType() == Token.Type.SEMI) return Register.EAX;
@@ -679,18 +826,15 @@ public class CodeGenerator {
 //                }
 //                return curClass;
 //            }
-//            case Expression.UNARY_EXPRESSION: {
-//                UnaryExpression unary = (UnaryExpression) ex;
-//                Class k = resolveExpression(unary.getExpression(), env);
-//                if (unary instanceof CastExpression) {
-//                    Class castType = env.lookupClazz(((CastExpression) unary).getCast());
-//                    if (!Class.isValidCast(castType, k)) {
-//                        throw new InconvertibleTypeException(curClass.getFileName(), unary,
-//                                castType, k);
-//                    }
-//                    return castType;
-//                }
-//
+            case Expression.UNARY_EXPRESSION: {
+                UnaryExpression unary = (UnaryExpression) ex;
+                Register r = generateCodeForExpression(unary.getExpression());
+                if (unary instanceof CastExpression) {
+                    // TODO
+                   return r;
+                }
+                // TODO
+
 //                switch (unary.getOp().getType()) {
 //                    case NOT:
 //                        if (k != BaseEnvironment.TYPE_BOOLEAN) {
@@ -709,19 +853,11 @@ public class CodeGenerator {
 //                                String.format("Error. Name resolver does not support the unary '%s' operator",
 //                                        unary.getOp().getType()));
 //                }
-//            }
+                break;
+            }
             case Expression.VARIABLE_EXPRESSION: {
                 VariableExpression varExpr = (VariableExpression) ex;
-                List<Field> fields = varExpr.getProper();
-                for (Field f : fields) {
-                    if (Modifier.isStatic(f.getModifiers())) {
-                        curSrc.linkLabel(f.getUniqueName());
-                        curSrc.mov(Register.EAX, "dword [" + f.getUniqueName() + "]");
-                    } else {
-                        // TODO
-                    }
-                }
-                return Register.EAX;
+                return (Register) generateCodeForVariableExpression(varExpr, false);
             }
 //            default:
 //                throw new RuntimeException(
@@ -732,13 +868,234 @@ public class CodeGenerator {
         return Register.EAX;
     }
 
+    /**
+     * Generates the code to get either the value of a variable expression or the address of a
+     * variable expression.
+     * @param varExpr
+     * @param returnAddress
+     * @return Register in which the value is stored or RegisterExpression for address.
+     */
+    private Object generateCodeForVariableExpression(VariableExpression varExpr, boolean returnAddress) {
+        if (varExpr instanceof FieldVariable) {
+            FieldVariable fVar = (FieldVariable) varExpr;
+            Register r = generateCodeForExpression(fVar.getPrefixExpr());
+
+            Field f = fVar.getProper().get(0);
+            RegisterExpression re = getReForField(r, f);
+
+            //
+            curSrc.lea(r, re);
+            if (returnAddress) {
+                re.set(r);
+                return re;
+            } else {
+                curSrc.mov(r.getAsm(), "[" + r.getAsm()+ "]");
+                return r;
+            }
+        } else if (varExpr instanceof NameVariable) {
+            NameVariable nVar = (NameVariable) varExpr;
+
+            RegisterExpression re = new RegisterExpression();
+
+            List<Field> fields = varExpr.getProper();
+            // TODO support form method().field
+            int level = 0;
+            for (Field f : fields) {
+                if (Modifier.isStatic(f.getModifiers())) {
+                    curSrc.linkLabel(f.getUniqueName());
+                    re.set(f.getUniqueName());
+                } else {
+                    if (f instanceof Variable) {
+                        Variable var = (Variable) f;
+
+                        if (level != 0) {
+                            throw new IllegalStateException("Nested local variable");
+                        }
+                        re.set(var.getAddress());
+                    } else {
+                        if (level == 0) {
+                            // this must be accessing a field of "this" object
+                            // so we must load "this" into EAX
+                            re = getThisField();
+                            curSrc.movRef(Register.EAX, re);
+                        }
+
+                        re = getReForField(Register.EAX, f);
+
+                        curSrc.lea(Register.EAX, re);
+                        re.set(Register.EAX);
+                    }
+                }
+
+                if (!f.getType().isPrimitive()) {
+                    curSrc.mov(Register.EAX, "dword [" + re.toString() + "]");
+                    re.set(Register.EAX);
+                }
+
+                level++;
+            }
+
+            if (returnAddress) {
+                return re;
+            } else {
+                curSrc.mov(Register.EAX, "dword [" + re.toString() + "]");
+                return Register.EAX;
+            }
+        }
+        return Register.EAX;
+    }
+
+    public RegisterExpression getReForField(Register objectRegister, Field field) {
+        RegisterExpression re = new RegisterExpression();
+        int index = field.getDeclaringClass().getFieldIndex(field);
+        if (!field.getDeclaringClass().isArray()) {
+            index += OBJECT_OVERHEAD;
+        }
+        if (index == 0) {
+            re.set(objectRegister);
+            return re;
+        }
+
+        index *= POINTER_SIZE;
+
+        re.set(objectRegister, Operator.PLUS, index);
+
+        return re;
+    }
+
+    public Object generateCodeForArrayAccessExpression(ArrayAccessExpression arrayAccess, boolean returnAddress) {
+        Register r2 = generateCodeForExpression(arrayAccess.getIndexExpr());
+        curSrc.push(r2);
+        RegisterExpression r1 = generateAddressForExpression(arrayAccess.getArrayExpr());
+        if (!r1.isUnary()) {
+            curSrc.lea(Register.EAX, r1);
+        } else if (r1.isLabel()) {
+            curSrc.mov(Register.EAX, r1.toString());
+        } else if (!r1.isRegisterUsed(Register.EAX)) {
+            curSrc.mov(Register.EAX, r1.toString());
+        }
+        r2 = Register.EBX;
+        curSrc.pop(r2);
+
+        curSrc.call("__arrayBoundCheck");
+
+        curSrc.add(r2, 1); // account for length var
+        curSrc.shl(r2, 2);
+
+        if (returnAddress) {
+            r1.set(Register.EAX, Operator.PLUS, Register.EBX);
+            return r1;
+        } else {
+            curSrc.mov(Register.EAX, String.format("dword [%s+%s]", Register.EAX, r2.getAsm()));
+            return Register.EAX;
+        }
+    }
+
+    private void linkArgumentAddresses(boolean isInstanceMethod, List<VarDecl> arguments) {
+        int i;
+        if (isInstanceMethod) {
+            i = 12; // cause 'this' is stored at 8...
+        } else {
+            i = 8;
+        }
+
+        for (VarDecl vd : arguments) {
+            Variable v = (Variable) vd.getProper();
+            RegisterExpression re = new RegisterExpression();
+            re.set(Register.EBP, Operator.PLUS, i);
+            v.setAddress(re);
+
+            i += 4;
+        }
+    }
+
+    private int allocateSpaceForLocalVariables(List<Statement> statements) {
+        int localVarsInBlock = 0;
+        Queue<Statement> toProcess = new LinkedList<>();
+
+        for (Statement s : statements) {
+            toProcess.add(s);
+        }
+
+        while (toProcess.size() != 0) {
+            Statement s = toProcess.poll();
+            switch (s.getStatementType()) {
+                case Statement.TYPE_BLOCK: {
+                    Block b = (Block) s;
+                    for (Statement ss : b.getStatements()) {
+                        toProcess.add(ss);
+                    }
+                    break;
+                }
+                case Statement.TYPE_FOR: {
+                    ForStatement fs = (ForStatement) s;
+                    Statement st;
+                    if ((st = fs.getForInit()) != null)
+                        toProcess.add(st);
+                    if ((st = fs.getBody()) != null)
+                        toProcess.add(st);
+                    break;
+                }
+                case Statement.TYPE_IF: {
+                    IfStatement is = (IfStatement) s;
+
+                    for (IfStatement.IfBlock b : is.getIfBlocks()) {
+                        toProcess.add(b);
+                    }
+                    if (is.getElseBlock() != null) {
+                        toProcess.add(is.getElseBlock());
+                    }
+                    break;
+                }
+                case Statement.TYPE_IF_BLOCK: {
+                    IfStatement.IfBlock ib = (IfStatement.IfBlock) s;
+
+                    if (ib.getBody() != null) {
+                        toProcess.add(ib.getBody());
+                    }
+                    break;
+                }
+                case Statement.TYPE_VARDECL: {
+                    VarDecl vd = (VarDecl) s;
+                    Variable v = (Variable) vd.getProper();
+
+                    RegisterExpression re = new RegisterExpression();
+                    re.set(Register.EBP, Operator.MINUS, curSrc.getBpOffset() + (localVarsInBlock << 2));
+                    v.setAddress(re);
+                    localVarsInBlock++;
+                    break;
+                }
+                case Statement.TYPE_WHILE: {
+                    WhileStatement ws = (WhileStatement) s;
+                    if (ws.getBody() != null) {
+                        toProcess.add(ws.getBody());
+                    }
+                }
+            }
+        }
+
+        int localVarSize = localVarsInBlock << 2;
+        if (localVarsInBlock != 0) {
+            curSrc.sub(Register.ESP, localVarSize);
+        }
+        return localVarSize;
+    }
+
     private void declareAllStaticFields(Class c) {
         curSrc.setActiveSectionId(Section.BSS);
 
         for (Field f : c.getDeclaredFields()) {
             if (Modifier.isStatic(f.getModifiers())) {
+                curSrc.global(f.getUniqueName());
                 curSrc.resd(f.getUniqueName());
             }
         }
+    }
+
+    public RegisterExpression getThisField() {
+        // by our calling convention, "this" is stored at EBP + 8
+        RegisterExpression re = new RegisterExpression();
+        re.set(Register.EBP, Operator.PLUS, 8);
+        return re;
     }
 }

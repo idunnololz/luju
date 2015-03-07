@@ -22,7 +22,7 @@ public abstract class SimpleEnvironment extends Environment {
                 throw new EnvironmentException("Non static field referenced from static context",
                         EnvironmentException.ERROR_NON_STATIC_FIELD_FROM_STATIC_CONTEXT,
                         f);
-            } else if (Environment.allowNonStatic && Environment.noStaticMode && Modifier.isStatic(f.getModifiers())) {
+            } else if (Environment.allowNonStatic && Environment.strictStaticMode && Modifier.isStatic(f.getModifiers())) {
                 throw new EnvironmentException("Static field referenced from non static context",
                         EnvironmentException.ERROR_STATIC_FIELD_FROM_NON_STATIC_CONTEXT,
                         f);

@@ -29,6 +29,8 @@ public class Assembler {
     private volatile boolean quit = false;
     private Process proc;
 
+    private boolean initialized = false;
+
     public static class Builder {
         private Os os = Os.LINUX;
         private boolean useCygwin = false;
@@ -55,18 +57,7 @@ public class Assembler {
         this.useCygwin = useCygwin;
         this.cygwinBashPath = cygwinBashPath;
 
-        if (useCygwin) {
-            if (!new File(cygwinBashPath).exists()) {
-                throw new RuntimeException("Cygwin bash executable does not exist. Given: " + cygwinBashPath);
-            }
-            proc = Runtime.getRuntime().exec(new String[]{cygwinBashPath, "-s"});
-        } else {
-            proc = Runtime.getRuntime().exec("bash -s");
-        }
-
-        ps = new PrintStream(proc.getOutputStream());
-
-        startThreads(proc.getInputStream(), proc.getErrorStream());
+        initialized = false;
     }
 
     private void startThreads(final InputStream out, final InputStream err) {
@@ -102,7 +93,32 @@ public class Assembler {
         errorThread.start();
     }
 
+    public void initialize() {
+        try {
+            if (useCygwin) {
+                if (!new File(cygwinBashPath).exists()) {
+                    throw new RuntimeException("Cygwin bash executable does not exist. Given: " + cygwinBashPath);
+                }
+                proc = Runtime.getRuntime().exec(new String[]{cygwinBashPath, "-s"});
+            } else {
+                proc = Runtime.getRuntime().exec("bash -s");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        ps = new PrintStream(proc.getOutputStream());
+
+        startThreads(proc.getInputStream(), proc.getErrorStream());
+
+        initialized = true;
+    }
+
     public void assemble(String directoryPath) throws IOException {
+        if (!initialized) {
+            initialize();
+        }
+
         generateUtilFiles(directoryPath);
 
         File dir = new File(directoryPath);
@@ -133,9 +149,13 @@ public class Assembler {
         if (os == Os.WINDOWS) {
             AssemblerUtils.outputWindowsHelperFile(dir);
         }
+
+        AssemblerUtils.outputUtilsFile(dir);
     }
 
     public void shutdown() {
+        if (!initialized) return;
+
         quit = true;
 
         ps.println("exit");

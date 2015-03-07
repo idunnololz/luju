@@ -7,6 +7,7 @@ import java.io.PrintWriter;
 public class AssemblerUtils {
 
     private static final String HELPER_FILE_NAME = "runtime.s";
+    private static final String UTILS_FILE_NAME = "utils.s";
 
     public static void outputWindowsHelperFile(String directory) {
         File f = new File(directory + File.separator + HELPER_FILE_NAME);
@@ -27,6 +28,39 @@ public class AssemblerUtils {
             }
         }
     }
+
+    public static void outputUtilsFile(String directory) {
+        File f = new File(directory + File.separator + UTILS_FILE_NAME);
+        f.getParentFile().mkdirs();
+
+        PrintWriter pw = null;
+        try {
+            f.createNewFile();
+
+            pw = new PrintWriter(f);
+
+            pw.write(UTILS_SOURCE);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (pw != null) {
+                pw.close();
+            }
+        }
+    }
+
+    private static final String UTILS_SOURCE =
+            "extern __exception\n" +
+                    "\n" +
+                    "section .text\n" +
+                    "; check if index ebx is valid for array at eax\n" +
+                    "\tglobal __arrayBoundCheck\n" +
+                    "__arrayBoundCheck:\n" +
+                    "\tcmp [eax], ebx\n" +
+                    "\tjle .outOfBounds\n" +
+                    "\tret\n" +
+                    ".outOfBounds:\n" +
+                    "\tcall __exception";
 
     private static final String HELPER_WINDOWS_SOURCE = "extern _GetStdHandle@4\n" +
             "extern _WriteConsoleA@20\n" +

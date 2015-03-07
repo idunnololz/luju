@@ -2,12 +2,19 @@ package com.ggstudios.env;
 
 import com.ggstudios.types.TypeDecl;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class ArrayClass extends Class {
     private Class baseClass;
     private Environment env;
+    private Map<Field, Integer> fieldToIndex = new HashMap<>();
 
     public ArrayClass(Class c) {
-        putField(new Field(c, BaseEnvironment.TYPE_INT, "length", Modifier.FINAL));
+        Field lengthField = new Field(this, BaseEnvironment.TYPE_INT, "length", Modifier.FINAL);
+        putField(lengthField);
+        fieldToIndex.put(lengthField, 0);
+
         baseClass = c;
 
         env = new ClassEnvironment(this);
@@ -65,5 +72,14 @@ public class ArrayClass extends Class {
     @Override
     public Environment getEnvironment() {
         return env;
+    }
+
+    @Override
+    public int getFieldIndex(Field f) {
+        Integer i;
+        if ((i = fieldToIndex.get(f)) == null) {
+            throw new RuntimeException("Field " + f.getName() + " index not found in class " + getCanonicalName());
+        }
+        return i;
     }
 }
