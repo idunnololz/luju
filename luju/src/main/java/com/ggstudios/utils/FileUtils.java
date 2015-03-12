@@ -38,9 +38,9 @@ public class FileUtils {
             try {
                 pw = new PrintWriter(f);
                 pw.write(text);
+                pw.flush();
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
-
             } finally {
                 if (pw != null) {
                     pw.close();

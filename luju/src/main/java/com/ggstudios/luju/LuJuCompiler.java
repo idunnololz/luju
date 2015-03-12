@@ -1,10 +1,13 @@
 package com.ggstudios.luju;
 
+import com.ggstudios.env.Class;
+import com.ggstudios.env.Field;
+import com.ggstudios.env.Interface;
+import com.ggstudios.env.Method;
 import com.ggstudios.error.AstException;
 import com.ggstudios.error.NameResolutionException;
 import com.ggstudios.error.ParseException;
 import com.ggstudios.error.TokenException;
-import com.ggstudios.error.TypeException;
 import com.ggstudios.error.WeedException;
 import com.ggstudios.types.AstNode;
 import com.ggstudios.utils.ExceptionUtils;
@@ -64,6 +67,11 @@ public class LuJuCompiler {
     public int compileWith(final Main.ArgList args) {
         final Ast ast = new Ast();
 
+        Class.reset();
+        Field.reset();
+        Interface.reset();
+        Method.reset();
+
         final CountDownLatch doneSignal = new CountDownLatch(args.fileNames.size());
 
         final Result result = new Result();
@@ -114,7 +122,7 @@ public class LuJuCompiler {
         }
 
         if (args.isGenerateCode()) {
-            codeGenerator.generateCode(ast, assembler);
+            codeGenerator.generateCode(args.useCache, ast, assembler);
         }
 
         return RETURN_CODE_SUCCESS;

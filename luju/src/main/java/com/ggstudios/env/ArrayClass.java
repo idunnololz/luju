@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ArrayClass extends Class {
+    private static final String ARRAY_LABEL_SUFFIX = "#Array";
+
     private Class baseClass;
     private Environment env;
     private Map<Field, Integer> fieldToIndex = new HashMap<>();
@@ -13,7 +15,7 @@ public class ArrayClass extends Class {
     public ArrayClass(Class c) {
         Field lengthField = new Field(this, BaseEnvironment.TYPE_INT, "length", Modifier.FINAL);
         putField(lengthField);
-        fieldToIndex.put(lengthField, 0);
+        fieldToIndex.put(lengthField, 2);
 
         baseClass = c;
 
@@ -30,6 +32,10 @@ public class ArrayClass extends Class {
 
     public String getCanonicalName() {
         return baseClass.getCanonicalName();
+    }
+
+    public String getUniqueLabel() {
+        return baseClass.getUniqueLabel() + ARRAY_LABEL_SUFFIX;
     }
 
     @Override
@@ -81,5 +87,9 @@ public class ArrayClass extends Class {
             throw new RuntimeException("Field " + f.getName() + " index not found in class " + getCanonicalName());
         }
         return i;
+    }
+
+    public String getVtableLabel() {
+        return BaseEnvironment.TYPE_OBJECT.getVtableLabel();
     }
 }

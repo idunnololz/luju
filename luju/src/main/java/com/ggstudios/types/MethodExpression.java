@@ -1,11 +1,15 @@
 package com.ggstudios.types;
 
+import com.ggstudios.env.Field;
+import com.ggstudios.env.Method;
+
 import java.util.List;
 
 public class MethodExpression extends Expression {
     private Expression prefixExpr;
     private String methodName;
     private List<Expression> argList;
+    private Method proper;
 
     public MethodExpression() {
         setType(METHOD_EXPRESSION);
@@ -53,5 +57,13 @@ public class MethodExpression extends Expression {
 
     public Expression getPrefixExpression() {
         return prefixExpr;
+    }
+
+    public void setProper(Method proper) {
+        this.proper = proper;
+    }
+
+    public Method getProper() {
+        return proper;
     }
 }

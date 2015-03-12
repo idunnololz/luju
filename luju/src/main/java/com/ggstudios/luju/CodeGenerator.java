@@ -13,6 +13,7 @@ import com.ggstudios.env.Literal;
 import com.ggstudios.env.Method;
 import com.ggstudios.env.Modifier;
 import com.ggstudios.env.Variable;
+import com.ggstudios.error.TestFailedException;
 import com.ggstudios.types.ArrayAccessExpression;
 import com.ggstudios.types.ArrayCreationExpression;
 import com.ggstudios.types.AssignExpression;
@@ -28,9 +29,12 @@ import com.ggstudios.types.ICreationExpression;
 import com.ggstudios.types.IfStatement;
 import com.ggstudios.types.LiteralExpression;
 import com.ggstudios.types.MethodDecl;
+import com.ggstudios.types.MethodExpression;
 import com.ggstudios.types.NameVariable;
+import com.ggstudios.types.ReferenceType;
 import com.ggstudios.types.ReturnStatement;
 import com.ggstudios.types.Statement;
+import com.ggstudios.types.TypeOrVariableExpression;
 import com.ggstudios.types.UnaryExpression;
 import com.ggstudios.types.VarDecl;
 import com.ggstudios.types.VarInitDecl;
@@ -43,9 +47,11 @@ import com.ggstudios.utils.Print;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.Stack;
 
 public class CodeGenerator {
@@ -61,10 +67,11 @@ public class CodeGenerator {
     private List<Class> declaredClasses;
     private IntermediateSource[] sources;
     private IntermediateSource curSrc;
+    private Class curClass;
 
     private List<String> classLoaders;
 
-    public void generateCode(Ast ast, Assembler assembler) {
+    public void generateCode(boolean useCache, Ast ast, Assembler assembler) {
         // Strategy for generating our sources
         // 1. For each class:
         // 2.   Generate class information. Write into .data section
@@ -81,6 +88,7 @@ public class CodeGenerator {
         declaredClasses = new ArrayList<>();
         for (FileNode fn : ast) {
             Class c = fn.getThisClass();
+
             if (c != null) {
                 declaredClasses.add(c);
             }
@@ -92,7 +100,6 @@ public class CodeGenerator {
         }
 
         generateSourcesForClasses();
-
 
         HashMap<String, String> fileNameToText = new HashMap<>();
 
@@ -128,6 +135,16 @@ public class CodeGenerator {
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        String result;
+        do {
+            result = assembler.getResult();
+        } while (result.length() == 0);
+
+        int res = Integer.valueOf(result);
+        if (res != 123) {
+            throw new TestFailedException(res);
+        }
     }
 
     /**
@@ -135,6 +152,9 @@ public class CodeGenerator {
      * Classes will be named normally. For instance, a.b.C (where a.b is the package and C is the
      * class name) will still be named a.b.C in the assembly. Note that the default package has name
      * '@default'.
+     *
+     * Each class will also define an array class (C[]). The naming of such classes will have the
+     * form className#Array (eg, com.example.C#Array)
      *
      * Method names will have the form _methodName@version. For instance, if class C has a method
      * named 'a', the method will have label '_a@1'. If another method also has the name 'a' or if 'a'
@@ -161,9 +181,17 @@ public class CodeGenerator {
             // Before we begin, ask the class to pre generate some information that will be useful
             // to us in code generation...
 
-            IntermediateSource src = sources[c.getId()];
+            if (c.isCached()) continue;
+
+            curClass = c;
+
+            IntermediateSource src = sources[c.getId() - 1];
             curSrc = src;
             src.setFileName(c.getCanonicalName().replace('.', '@') + ".s");
+
+//            Print.ln(c.getName());
+//            Print.ln(curSrc.getFileName());
+//            Print.ln("" + c.getId());
 
             generateStaticClassData(c);
             declareAllStaticFields(c);
@@ -202,8 +230,18 @@ public class CodeGenerator {
         curSrc.push(Register.EBP);
         curSrc.mov(Register.EBP, Register.ESP);
 
+        Class c = constructor.getDeclaringClass();
+        if (c.getSuperClass() != null) {
+            Class superClass = c.getSuperClass();
+            Constructor superC = (Constructor) superClass.get(Constructor.getConstructorSignature(superClass.getName(), new ArrayList<Class>()));
+            curSrc.movRef(Register.EAX, getThisField());
+            curSrc.push(Register.EAX);
+            curSrc.call(superC.getUniqueName());
+            curSrc.add(Register.ESP, 4);
+        }
         curSrc.call(OBJECT_INSTANCE_INIT_LABEL);
 
+        curSrc.setBpOffset(4);
         linkArgumentAddresses(true, cd.getArguments());
         allocateSpaceForLocalVariables(b.getStatements());
 
@@ -225,6 +263,21 @@ public class CodeGenerator {
         MethodDecl md = method.getMethodDecl();
         Block b = md.getBlock();
 
+        if (comment) {
+            StringBuilder sb = new StringBuilder();
+            if (method.getParameterTypes().length != 0) {
+                for (Class c : method.getParameterTypes()) {
+                    sb.append(c.getName());
+                    sb.append(", ");
+                }
+                sb.setLength(sb.length() - 2);
+            }
+
+            curSrc.addComment(String.format("%s %s(%s) {",
+                    method.getReturnType().getName(), method.getName(),
+                    sb.toString()));
+        }
+
         curSrc.resetBpOffset();
         curSrc.push(Register.EBP);
         curSrc.mov(Register.EBP, Register.ESP);
@@ -232,7 +285,8 @@ public class CodeGenerator {
         linkArgumentAddresses(!Modifier.isStatic(method.getModifiers()), md.getArguments());
 
         if (Modifier.isNative(method.getModifiers())) {
-            // TODO
+            curSrc.call("NATIVE" + curClass.getCanonicalName() + "." + method.getName());
+            restoreStackAndReturn();
         } else {
             allocateSpaceForLocalVariables(b.getStatements());
 
@@ -243,6 +297,10 @@ public class CodeGenerator {
 
         if (method.getReturnType() == BaseEnvironment.TYPE_VOID) {
             restoreStackAndReturn();
+        }
+
+        if (comment) {
+            curSrc.addComment("}");
         }
     }
 
@@ -256,17 +314,32 @@ public class CodeGenerator {
         // There will be one block of constant class data defined in the .data section per class
         // The structure of each class info will be:
         // <vptr>
+        // sizeOfTree
         // <inheritance tree> = list of (<ptr_to_class>, <offset>)
 
         curSrc.setActiveSectionId(Section.DATA);
 
         curSrc.glabel(c.getVtableLabel());
 
-        // TODO generate vtable
+        if (c.isInterface() || Modifier.isAbstract(c.getModifiers())) {
+
+        } else {
+            for (Method m : c.getCompleteNonStaticMethodList()) {
+                if (m == null) {
+                    throw new RuntimeException("Wtf. Class: " + c.getCanonicalName());
+                }
+                if (Modifier.isAbstract(m.getModifiers())) {
+                    throw new RuntimeException("Abstract method in non abstract class");
+                } else {
+                    curSrc.dd(m.getUniqueName());
+                }
+            }
+        }
 
         curSrc.glabel(c.getCanonicalName());
 
         curSrc.dd(c.getVtableLabel());
+        curSrc.dd((c.getSuperClass() == null ? 0 : 1) + c.getInterfaces().length);
 
         Class superClass;
         if ((superClass = c.getSuperClass()) != null) {
@@ -276,6 +349,27 @@ public class CodeGenerator {
 
         for (Class i : c.getInterfaces()) {
             curSrc.dd(i.getCanonicalName());
+            curSrc.dd(i.getDeclaredMethods().size() * POINTER_SIZE);
+        }
+
+        // define the array class data
+
+        Class ac = c.getArrayClass();
+        curSrc.glabel(ac.getUniqueLabel());
+        curSrc.dd(ac.getVtableLabel());
+        curSrc.dd((c.getSuperClass() == null ? 0 : 1) + c.getInterfaces().length + 1);
+
+        curSrc.dd(BaseEnvironment.TYPE_OBJECT.getUniqueLabel());
+        curSrc.dd(0);
+        if ((superClass = c.getSuperClass()) != null) {
+            ac = superClass.getArrayClass();
+            curSrc.dd(ac.getUniqueLabel());
+            curSrc.dd(0);
+        }
+
+        for (Class i : c.getInterfaces()) {
+            ac = i.getArrayClass();
+            curSrc.dd(ac.getUniqueLabel());
             curSrc.dd(i.getDeclaredMethods().size() * POINTER_SIZE);
         }
     }
@@ -325,6 +419,18 @@ public class CodeGenerator {
         curSrc.mov(Register.EAX, "[" + instanceAddr.toString() + "]");
 
         StringBuilder sb = new StringBuilder();
+        Register instanceR = Register.EAX;
+
+        for (Field f : c.getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers())) continue;
+
+            VarDecl vd = f.getVarDecl();
+
+            if (!(vd instanceof VarInitDecl)) {
+                RegisterExpression re = getReForField(Register.EAX, f);
+                curSrc.movRef(re, 0);
+            }
+        }
 
         for (Field f : c.getDeclaredFields()) {
             if (Modifier.isStatic(f.getModifiers())) continue;
@@ -332,7 +438,7 @@ public class CodeGenerator {
             VarDecl vd = f.getVarDecl();
 
             if (vd instanceof VarInitDecl) {
-                curSrc.push(Register.EAX);
+                curSrc.push(instanceR);
                 VarInitDecl vid = (VarInitDecl) vd;
 
                 if (comment) {
@@ -343,13 +449,11 @@ public class CodeGenerator {
                 Register r2 = generateCodeForExpression(vid.getExpr());
                 Register r1 = Register.getNextRegisterFrom(r2);
                 curSrc.pop(r1);
+                instanceR = r1;
 
                 RegisterExpression re = getReForField(r1, f);
 
                 curSrc.movRef(re, r2);
-            } else {
-                RegisterExpression re = getReForField(Register.EAX, f);
-                curSrc.movRef(re, 0);
             }
         }
         curSrc.ret();
@@ -391,8 +495,8 @@ public class CodeGenerator {
                 }
                 curSrc.label(start);
 
-                if (forStatement.getBody() != null) {
-                    generateCodeForStatement(forStatement.getBody());
+                if (forStatement.getForUpdate() != null) {
+                    generateCodeForStatement(forStatement.getForUpdate());
                 }
 
                 curSrc.label(label);
@@ -406,8 +510,8 @@ public class CodeGenerator {
                     curSrc.je(exit);
                 }
 
-                if (forStatement.getForUpdate() != null) {
-                    generateCodeForStatement(forStatement.getForUpdate());
+                if (forStatement.getBody() != null) {
+                    generateCodeForStatement(forStatement.getBody());
                 }
 
                 curSrc.jmp(start);
@@ -509,6 +613,13 @@ public class CodeGenerator {
                 VariableExpression varExpr = (VariableExpression) ex;
                 return (RegisterExpression) generateCodeForVariableExpression(varExpr, true);
             }
+            case Expression.UNARY_EXPRESSION:
+            case Expression.METHOD_EXPRESSION: {
+                Register r = generateCodeForExpression(ex);
+                RegisterExpression re = new RegisterExpression();
+                re.set(r);
+                return re;
+            }
             default:
                 throw new RuntimeException(
                         String.format("Error. Cannot generate code to get the address of an expression with type '%s'",
@@ -531,25 +642,31 @@ public class CodeGenerator {
 
                 curSrc.mov(Register.EBX, Register.EAX);
 
-                curSrc.add(Register.EAX, 1);    // for the length variable...
+                curSrc.add(Register.EAX, 3);    // for the length variable...
                 curSrc.shl(Register.EAX, 2);
                 curSrc.call("__malloc");
+                curSrc.call("__zeroArray");
 
-                curSrc.movRef(Register.EAX, Register.EBX);
+                Class o = arrayCreation.getClassType();
+
+                RegisterExpression re = new RegisterExpression();
+                re.set(Register.EAX);
+                curSrc.movRef(re, o.getUniqueLabel());
+                re.set(Register.EAX, Operator.PLUS, 4);
+                curSrc.movRef(re, o.getVtableLabel());
+                re.set(Register.EAX, Operator.PLUS, 8);
+                curSrc.movRef(re, Register.EBX);
 
                 return Register.EAX;
             }
             case Expression.ASSIGN_EXPRESSION: {
                 AssignExpression assign = (AssignExpression) ex;
+                RegisterExpression re = generateAddressForExpression(assign.getLhs());
+                re.dumpToSingleRegister(curSrc, Register.EAX);
+                curSrc.push(Register.EAX);
                 Register r2 = generateCodeForExpression(assign.getRhs());
-                curSrc.pushPoint();
-                curSrc.push(r2);
-                curSrc.record();
-                RegisterExpression r1 = generateAddressForExpression(assign.getLhs());
-                r2 = Register.getNextRegisterFrom(r1);
-                curSrc.stop();
-                curSrc.pop(r2);
-                curSrc.restorePointIfClean();
+                Register r1 = Register.getNextRegisterFrom(r2);
+                curSrc.pop(r1);
 
                 curSrc.movRef(r1, r2);
 
@@ -557,15 +674,21 @@ public class CodeGenerator {
             }
             case Expression.BINARY_EXPRESSION: {
                 BinaryExpression binEx = (BinaryExpression) ex;
-                Register r2 = generateCodeForExpression(binEx.getRightExpr());
-                curSrc.push(r2);
-                Register r1 = generateCodeForExpression(binEx.getLeftExpr());
-                if (r1 != Register.EAX) {
-                    curSrc.mov(Register.EAX, r1);
+                Register r1 = null;
+                Register r2 = null;
+                Token.Type t = binEx.getOp().getType();
+                if (t != Token.Type.AMP_AMP && t != Token.Type.PIPE_PIPE) {
+                    r1 = generateCodeForExpression(binEx.getLeftExpr());
+                    curSrc.push(r1);
+                    r2 = generateCodeForExpression(binEx.getRightExpr());
+                    if (r2 != Register.EBX) {
+                        curSrc.mov(Register.EBX, r2);
+                        r2 = Register.EBX;
+                    }
+                    r1 = Register.EAX;
+                    curSrc.pop(r1);
                 }
-                r2 = Register.EBX;
-                curSrc.pop(r2);
-                switch (binEx.getOp().getType()) {
+                switch (t) {
                     case LT:
                     case LT_EQ:
                     case GT:
@@ -604,7 +727,11 @@ public class CodeGenerator {
                         String l1 = curSrc.getFreshLabel();
                         String l2 = curSrc.getFreshLabel();
 
-                        curSrc.test(r1, r2);
+                        r1 = generateCodeForExpression(binEx.getLeftExpr());
+                        curSrc.test(r1, r1);
+                        curSrc.jne(l1);
+                        r2 = generateCodeForExpression(binEx.getRightExpr());
+                        curSrc.test(r2, r2);
                         curSrc.jne(l1);
                         curSrc.mov(Register.EAX, 0);
                         curSrc.jmp(l2);
@@ -618,7 +745,11 @@ public class CodeGenerator {
                         String l1 = curSrc.getFreshLabel();
                         String l2 = curSrc.getFreshLabel();
 
-                        curSrc.test(r1, r2);
+                        r1 = generateCodeForExpression(binEx.getLeftExpr());
+                        curSrc.test(r1, r1);
+                        curSrc.je(l1);
+                        r2 = generateCodeForExpression(binEx.getRightExpr());
+                        curSrc.test(r2, r2);
                         curSrc.je(l1);
                         curSrc.mov(Register.EAX, 1);
                         curSrc.jmp(l2);
@@ -646,10 +777,64 @@ public class CodeGenerator {
 
                         return Register.EAX;
                     }
-                    case PLUS:
-                        // TODO handle string concat
-                        curSrc.add(r1, r2);
-                        return r1;
+                    case PLUS: {
+                        Class lType = binEx.getLeftExpr().getClassType();
+                        Class rType = binEx.getRightExpr().getClassType();
+                        if (lType == BaseEnvironment.TYPE_STRING
+                                || rType == BaseEnvironment.TYPE_STRING) {
+
+                            if (rType != BaseEnvironment.TYPE_STRING) {
+                                List<Class> argTypes = new ArrayList<>();
+                                if (rType == BaseEnvironment.TYPE_NULL) {
+                                    argTypes.add(BaseEnvironment.TYPE_OBJECT);
+                                } else if (rType.isPrimitive()) {
+                                    argTypes.add(rType);
+                                } else {
+                                    argTypes.add(BaseEnvironment.TYPE_OBJECT);
+                                }
+                                curSrc.push(r1);
+                                Method valueOf = (Method) BaseEnvironment.TYPE_STRING.get(Method.getMethodSignature("valueOf", argTypes));
+                                curSrc.push(r2);
+                                curSrc.call(valueOf.getUniqueName());
+                                curSrc.add(Register.ESP, valueOf.getParameterTypes().length * 4);
+                                if (r2 != Register.EAX) {
+                                    curSrc.mov(r2, Register.EAX);
+                                }
+                                curSrc.pop(r1);
+                            } else if (lType != BaseEnvironment.TYPE_STRING) {
+                                List<Class> argTypes = new ArrayList<>();
+                                if (lType == BaseEnvironment.TYPE_NULL) {
+                                    argTypes.add(BaseEnvironment.TYPE_OBJECT);
+                                } else if (lType.isPrimitive()) {
+                                    argTypes.add(lType);
+                                } else {
+                                    argTypes.add(BaseEnvironment.TYPE_OBJECT);
+                                }
+                                curSrc.push(r2);
+                                Method valueOf = (Method) BaseEnvironment.TYPE_STRING.get(Method.getMethodSignature("valueOf", argTypes));
+                                curSrc.push(r1);
+                                curSrc.call(valueOf.getUniqueName());
+                                curSrc.add(Register.ESP, valueOf.getParameterTypes().length * 4);
+                                if (r1 != Register.EAX) {
+                                    curSrc.mov(r1, Register.EAX);
+                                }
+                                curSrc.pop(r2);
+                            }
+
+                            // String concat...
+                            List<Class> argTypes = new ArrayList<>();
+                            argTypes.add(BaseEnvironment.TYPE_STRING);
+                            Method concat = (Method) BaseEnvironment.TYPE_STRING.get(Method.getMethodSignature("concat", argTypes));
+                            curSrc.push(r2);
+                            curSrc.push(r1);
+                            curSrc.call(concat.getUniqueName());
+                            curSrc.add(Register.ESP, concat.getParameterTypes().length * 4 + 4);
+                            return Register.EAX;
+                        } else {
+                            curSrc.add(r1, r2);
+                            return r1;
+                        }
+                    }
                     case MINUS:
                         curSrc.sub(r1, r2);
                         return r1;
@@ -657,16 +842,35 @@ public class CodeGenerator {
                         curSrc.imul(r1, r2);
                         return r1;
                     case MOD:
+                        curSrc.call("__divideCheck");
                         curSrc.cdq();
                         curSrc.idiv(r2);
                         return Register.EDX;
                     case FSLASH:
+                        curSrc.call("__divideCheck");
                         curSrc.cdq();
                         curSrc.idiv(r2);
                         return r1;
-                    case INSTANCEOF:
-                        // TODO
+                    case INSTANCEOF: {
+                        String fls = curSrc.getFreshLabel();
+                        String exit = curSrc.getFreshLabel();
+
+                        curSrc.push(r2);
+
+                        curSrc.test(r1, r1);
+                        curSrc.je(fls);
+
+                        curSrc.mov(r1, String.format("[%s]", r1));
+                        curSrc.push(r1);
+                        curSrc.call("__instanceOf");
+                        curSrc.add(Register.ESP, 8);
+                        curSrc.jmp(exit);
+
+                        curSrc.label(fls);
+                        curSrc.mov(Register.EAX, 0);
+                        curSrc.label(exit);
                         return Register.EAX;
+                    }
                     default:
                         throw new RuntimeException(
                                 String.format("Error. Name resolver does not support the '%s' operator",
@@ -686,24 +890,7 @@ public class CodeGenerator {
                 Constructor constructor = instanceCreation.getProper();
 
                 List<Expression> args = instanceCreation.getArgList();
-                for (Expression arg : ListUtils.reverse(args)) {
-                    // since we can only store two args in registers, push the rest...
-                    // we need to reserve EAX for the address of the object
-                    Register r = generateCodeForExpression(arg);
-
-                    curSrc.push(r);
-                }
-
-                int fields = c.getCompleteNonStaticFields().size();
-
-                curSrc.mov(Register.EAX, fields + 2);
-                curSrc.shl(Register.EAX, 2);
-                curSrc.call("__malloc");
-                curSrc.push(Register.EAX);
-                curSrc.call(constructor.getUniqueName());
-                int argsCount = args.size() + 1;
-                curSrc.add(Register.ESP, argsCount * 4);
-                return Register.EAX;
+                return createInstance(c, constructor, args);
             }
             case Expression.LITERAL_EXPRESSION: {
                 LiteralExpression literalExpression = (LiteralExpression) ex;
@@ -712,7 +899,18 @@ public class CodeGenerator {
                 Register toUse = Register.EAX;
                 switch (lit.getTokenType()) {
                     case STRINGLIT:
-                        // TODO
+                        String t = curSrc.getFreshContextFreeLabel();
+                        curSrc.setActiveSectionId(Section.DATA);
+                        curSrc.declareString(t, (String) lit.getValue());
+                        curSrc.setActiveSectionId(Section.TEXT);
+
+                        Class string = BaseEnvironment.TYPE_STRING;
+                        List<Class> argTypes = new ArrayList<>();
+                        argTypes.add(BaseEnvironment.TYPE_CHAR.getArrayClass());
+                        Constructor c = (Constructor) string.get(Constructor.getConstructorSignature(string.getName(), argTypes));
+
+                        curSrc.push(t);
+                        createInstance(string, c, new ArrayList<Expression>());
                         break;
                     case CHARLIT:
                         curSrc.mov(toUse, (char)lit.getValue());
@@ -732,100 +930,67 @@ public class CodeGenerator {
                 }
                 return toUse;
             }
-//            case Expression.METHOD_EXPRESSION: {
-//                MethodExpression meth = (MethodExpression) ex;
-//                Expression e = meth.getPrefixExpression();
-//                List<Class> argTypes = new ArrayList<>();
-//                boolean b = inStaticContext;
-//                for (Expression expr : meth.getArgList()) {
-//                    argTypes.add(resolveExpression(expr, env));
-//                    inStaticContext = b;
-//                }
-//                String methSig = Method.getMethodSignature(meth.getMethodName(), argTypes);
-//                Method m;
-//
-//                if (e != null) {
-//                    Class type;
-//                    boolean methodAccessFromVariable = true;
-//                    boolean staticContext = false;
-//                    if (e.getExpressionType() == Expression.TYPE_OR_VARIABLE_EXPRESSION) {
-//                        Object o = getFieldOrType((TypeOrVariableExpression) e, env);
-//                        if (o instanceof Class) {
-//                            type = (Class) o;
-//                            methodAccessFromVariable = false;
-//                            staticContext = true;
-//                        } else {
-//                            type = ((Field)o).getType();
-//                        }
-//                    } else {
-//                        type = resolveExpression(e, env);
-//                    }
-//
-//                    m = type.getEnvironment().lookupMethod(methSig);
-//                    if (Modifier.isProtected(m.getModifiers()) && !curClass.isSubClassOf(m.getDeclaringClass())) {
-//                        throw new TypeException(curClass.getFileName(), lastNode,
-//                                String.format("'%s' has protected access in '%s'",
-//                                        m.getName(), m.getDeclaringClass()));
-//                    } else if (Modifier.isProtected(m.getModifiers()) && methodAccessFromVariable && !type.isSubClassOf(curClass)
-//                            && type.getPackage() != curClass.getPackage()) {
-//                        throw new TypeException(curClass.getFileName(), lastNode,
-//                                String.format("'%s' has protected access in '%s'",
-//                                        m.getName(), m.getDeclaringClass()));
-//                    }
-//
-//                    if (staticContext) {
-//                        if (!Modifier.isStatic(m.getModifiers())) {
-//                            throw new EnvironmentException("Non static method referenced from static context",
-//                                    EnvironmentException.ERROR_NON_STATIC_METHOD_FROM_STATIC_CONTEXT,
-//                                    m);
-//                        }
-//                    } else {
-//                        if (Modifier.isStatic(m.getModifiers())) {
-//                            throw new EnvironmentException("Static method referenced from non static context",
-//                                    EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
-//                                    m);
-//                        }
-//                    }
-//                } else {
-//                    m = env.lookupMethod(methSig);
-//
-//                    if (inStaticContext) {
-//
-//                        if (!Modifier.isStatic(m.getModifiers())) {
-//                            throw new EnvironmentException("Static method referenced from non static context",
-//                                    EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
-//                                    m);
-//                        }
-//                    }
-//                    if (Modifier.isStatic(m.getModifiers())) {
-//                        throw new TypeException(curClass.getFileName(), meth,
-//                                String.format("Static method '%s' cannot be referenced from non-static context",
-//                                        m.getName()));
-//                    }
-//                }
-//                if (!inStaticContext) {
-//                    if (Modifier.isStatic(m.getModifiers())) {
-//                        throw new EnvironmentException("Static method referenced from non static context",
-//                                EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
-//                                m);
-//                    }
-//                }
-//                return m.getReturnType();
-//            }
-//            case Expression.REFERENCE_TYPE: {
-//                ReferenceType refType = (ReferenceType) ex;
-//                Class type = env.lookupClazz(refType);
-//                refType.setProper(type);
-//                return type;
-//            }
-//            case Expression.THIS_EXPRESSION: {
-//                if (inStaticContext) {
-//                    throw new TypeException(curClass.getFileName(), ex,
-//                            String.format("'%s' cannot be referenced from a static context",
-//                                    curClass.getCanonicalName() + ".this"));
-//                }
-//                return curClass;
-//            }
+            case Expression.METHOD_EXPRESSION: {
+                MethodExpression me = (MethodExpression) ex;
+                Expression pre = me.getPrefixExpression();
+                List<Expression> expressions = me.getArgList();
+                Method m = me.getProper();
+
+                if (Modifier.isStatic(m.getModifiers())) {
+                    pushArguments(expressions, m.getParameterTypes());
+
+                    curSrc.call(m.getUniqueName());
+                    curSrc.add(Register.ESP, m.getParameterTypes().length * 4);
+                } else {
+                    pushArguments(expressions, m.getParameterTypes());
+                    if (pre != null) {
+                        if (pre.getExpressionType() == Expression.TYPE_OR_VARIABLE_EXPRESSION) {
+                            // Since we are sure this method isn't static, the pre-expression must
+                            // be a field...
+                            List<Field> fields = ((TypeOrVariableExpression) pre).getProper();
+                            RegisterExpression re = getAddressForFieldList(fields);
+
+                            int index = m.getDeclaringClass().getMethodIndex(m);
+                            curSrc.movRef(Register.EAX, re);
+                            curSrc.push(Register.EAX);
+                            curSrc.movRef(Register.EAX, getVtableAddress(Register.EAX));
+                            curSrc.movRef(Register.EAX, getMethodAddress(Register.EAX, index));
+                            curSrc.call(Register.EAX);
+                        } else {
+                            int index = m.getDeclaringClass().getMethodIndex(m);
+                            Register r = generateCodeForExpression(pre);
+                            curSrc.push(r);
+                            curSrc.movRef(Register.EAX, getVtableAddress(r));
+                            curSrc.movRef(Register.EAX, getMethodAddress(Register.EAX, index));
+                            curSrc.call(Register.EAX);
+                        }
+                    } else {
+                        curSrc.movRef(Register.EAX, getThisField());
+                        curSrc.push(Register.EAX);
+
+                        int index = curClass.getMethodIndex(m);
+                        curSrc.movRef(Register.EAX, getVtableAddress(Register.EAX));
+                        curSrc.movRef(Register.EAX, getMethodAddress(Register.EAX, index));
+                        curSrc.call(Register.EAX);
+                    }
+
+                    curSrc.add(Register.ESP, m.getParameterTypes().length * 4 + 4);
+                }
+
+                return Register.EAX;
+            }
+            case Expression.REFERENCE_TYPE: {
+                ReferenceType refType = (ReferenceType) ex;
+                Class type = refType.getProper();
+                String l = type.getUniqueLabel();
+                curSrc.linkLabel(l);
+                curSrc.mov(Register.EAX, l);
+                return Register.EAX;
+            }
+            case Expression.THIS_EXPRESSION: {
+                curSrc.movRef(Register.EAX, getThisField());
+                return Register.EAX;
+            }
             case Expression.UNARY_EXPRESSION: {
                 UnaryExpression unary = (UnaryExpression) ex;
                 Register r = generateCodeForExpression(unary.getExpression());
@@ -833,39 +998,66 @@ public class CodeGenerator {
                     // TODO
                    return r;
                 }
-                // TODO
 
-//                switch (unary.getOp().getType()) {
-//                    case NOT:
-//                        if (k != BaseEnvironment.TYPE_BOOLEAN) {
-//                            throw new TypeException(curClass.getFileName(), unary,
-//                                    String.format("Operator '!' cannot be applied to '%s'", k.getName()));
-//                        }
-//                        return BaseEnvironment.TYPE_BOOLEAN;
-//                    case MINUS:
-//                        if (Class.getCategory(k) != Class.CATEGORY_NUMBER) {
-//                            throw new TypeException(curClass.getFileName(), unary,
-//                                    String.format("Operator '-' cannot be applied to '%s'", k.getName()));
-//                        }
-//                        return k;
-//                    default:
-//                        throw new RuntimeException(
-//                                String.format("Error. Name resolver does not support the unary '%s' operator",
-//                                        unary.getOp().getType()));
-//                }
-                break;
+                switch (unary.getOp().getType()) {
+                    case NOT:
+                        String f = curSrc.getFreshLabel();
+                        String exit = curSrc.getFreshLabel();
+
+                        curSrc.test(r, r);
+                        curSrc.jne(f);
+                        curSrc.mov(Register.EAX, 1);
+                        curSrc.jmp(exit);
+                        curSrc.label(f);
+                        curSrc.mov(Register.EAX, 0);
+                        curSrc.label(exit);
+                        return Register.EAX;
+                    case MINUS:
+                        curSrc.neg(r);
+                        return r;
+                    default:
+                        throw new RuntimeException(
+                                String.format("Error. Name resolver does not support the unary '%s' operator",
+                                        unary.getOp().getType()));
+                }
             }
             case Expression.VARIABLE_EXPRESSION: {
                 VariableExpression varExpr = (VariableExpression) ex;
                 return (Register) generateCodeForVariableExpression(varExpr, false);
             }
-//            default:
-//                throw new RuntimeException(
-//                        String.format("Error. Name resolver does not support the expression type '%s'",
-//                                ex.getClass().getSimpleName()));
+            default:
+                throw new RuntimeException(
+                        String.format("Error. Code generator does not support the expression type '%s'",
+                                ex.getClass().getSimpleName()));
         }
+    }
 
+    public Register createInstance(Class c, Constructor constructor, List<Expression> args) {
+        pushArguments(args, constructor.getParameterTypes());
+
+        int fields = c.getCompleteNonStaticFields().size();
+
+        curSrc.mov(Register.EAX, fields + 2);
+        curSrc.shl(Register.EAX, 2);
+        curSrc.call("__malloc");
+
+        RegisterExpression re = new RegisterExpression();
+        re.set(Register.EAX);
+        curSrc.movRef(re, c.getCanonicalName());
+        curSrc.movRef(getVtableAddress(Register.EAX), c.getVtableLabel());
+
+        curSrc.push(Register.EAX);
+        curSrc.call(constructor.getUniqueName());
+        int argsCount = constructor.getParameterTypes().length + 1;
+        curSrc.add(Register.ESP, argsCount * 4);
         return Register.EAX;
+    }
+
+    public void pushArguments(List<Expression> args, Class[] argTypes) {
+        for (Expression e: ListUtils.reverse(args)) {
+            Register r = generateCodeForExpression(e);
+            curSrc.push(r);
+        }
     }
 
     /**
@@ -877,6 +1069,7 @@ public class CodeGenerator {
      */
     private Object generateCodeForVariableExpression(VariableExpression varExpr, boolean returnAddress) {
         if (varExpr instanceof FieldVariable) {
+            // probably from expressions of the form method().field
             FieldVariable fVar = (FieldVariable) varExpr;
             Register r = generateCodeForExpression(fVar.getPrefixExpr());
 
@@ -884,7 +1077,15 @@ public class CodeGenerator {
             RegisterExpression re = getReForField(r, f);
 
             //
+
+//            if (!f.getType().isPrimitive()) {
+//                curSrc.mov(Register.EAX, "dword [" + re.toString() + "]");
+//                re.set(Register.EAX);
+//            } else {
+//                curSrc.lea(r, re);
+//            }
             curSrc.lea(r, re);
+
             if (returnAddress) {
                 re.set(r);
                 return re;
@@ -893,47 +1094,12 @@ public class CodeGenerator {
                 return r;
             }
         } else if (varExpr instanceof NameVariable) {
+            // probably from expressions of the form field.field
             NameVariable nVar = (NameVariable) varExpr;
 
-            RegisterExpression re = new RegisterExpression();
-
             List<Field> fields = varExpr.getProper();
-            // TODO support form method().field
-            int level = 0;
-            for (Field f : fields) {
-                if (Modifier.isStatic(f.getModifiers())) {
-                    curSrc.linkLabel(f.getUniqueName());
-                    re.set(f.getUniqueName());
-                } else {
-                    if (f instanceof Variable) {
-                        Variable var = (Variable) f;
 
-                        if (level != 0) {
-                            throw new IllegalStateException("Nested local variable");
-                        }
-                        re.set(var.getAddress());
-                    } else {
-                        if (level == 0) {
-                            // this must be accessing a field of "this" object
-                            // so we must load "this" into EAX
-                            re = getThisField();
-                            curSrc.movRef(Register.EAX, re);
-                        }
-
-                        re = getReForField(Register.EAX, f);
-
-                        curSrc.lea(Register.EAX, re);
-                        re.set(Register.EAX);
-                    }
-                }
-
-                if (!f.getType().isPrimitive()) {
-                    curSrc.mov(Register.EAX, "dword [" + re.toString() + "]");
-                    re.set(Register.EAX);
-                }
-
-                level++;
-            }
+            RegisterExpression re = getAddressForFieldList(fields);
 
             if (returnAddress) {
                 return re;
@@ -942,7 +1108,49 @@ public class CodeGenerator {
                 return Register.EAX;
             }
         }
-        return Register.EAX;
+        throw new RuntimeException("Wtf... this ain't no variable expression son.");
+    }
+
+    private RegisterExpression getAddressForFieldList(List<Field> fields) {
+        RegisterExpression re = new RegisterExpression();
+
+        int level = 0;
+        for (Field f : fields) {
+            if (level != 0) {
+                curSrc.mov(Register.EAX, "dword [" + re.toString() + "]");
+                re.set(Register.EAX);
+            }
+
+            if (Modifier.isStatic(f.getModifiers())) {
+                curSrc.linkLabel(f.getUniqueName());
+                re.set(f.getUniqueName());
+            } else {
+                if (f instanceof Variable) {
+                    Variable var = (Variable) f;
+
+                    if (level != 0) {
+                        throw new IllegalStateException("Nested local variable");
+                    }
+                    re.set(var.getAddress());
+                } else {
+                    if (level == 0) {
+                        // this must be accessing a field of "this" object
+                        // so we must load "this" into EAX
+                        re = getThisField();
+                        curSrc.movRef(Register.EAX, re);
+                    }
+
+                    re = getReForField(Register.EAX, f);
+
+                    curSrc.lea(Register.EAX, re);
+                    re.set(Register.EAX);
+                }
+            }
+
+            level++;
+        }
+
+        return re;
     }
 
     public RegisterExpression getReForField(Register objectRegister, Field field) {
@@ -964,29 +1172,27 @@ public class CodeGenerator {
     }
 
     public Object generateCodeForArrayAccessExpression(ArrayAccessExpression arrayAccess, boolean returnAddress) {
+        Register r1 = generateCodeForExpression(arrayAccess.getArrayExpr());
+        curSrc.push(r1);
         Register r2 = generateCodeForExpression(arrayAccess.getIndexExpr());
-        curSrc.push(r2);
-        RegisterExpression r1 = generateAddressForExpression(arrayAccess.getArrayExpr());
-        if (!r1.isUnary()) {
-            curSrc.lea(Register.EAX, r1);
-        } else if (r1.isLabel()) {
-            curSrc.mov(Register.EAX, r1.toString());
-        } else if (!r1.isRegisterUsed(Register.EAX)) {
-            curSrc.mov(Register.EAX, r1.toString());
+        if (r2 != Register.EBX) {
+            curSrc.mov(Register.EBX, r2);
+            r2 = Register.EBX;
         }
-        r2 = Register.EBX;
-        curSrc.pop(r2);
+        r1 = Register.EAX;
+        curSrc.pop(r1);
 
         curSrc.call("__arrayBoundCheck");
 
-        curSrc.add(r2, 1); // account for length var
+        curSrc.add(r2, 3); // account for array header
         curSrc.shl(r2, 2);
 
         if (returnAddress) {
-            r1.set(Register.EAX, Operator.PLUS, Register.EBX);
-            return r1;
+            RegisterExpression re = new RegisterExpression();
+            re.set(r1, Operator.PLUS, r2);
+            return re;
         } else {
-            curSrc.mov(Register.EAX, String.format("dword [%s+%s]", Register.EAX, r2.getAsm()));
+            curSrc.mov(Register.EAX, String.format("dword [%s+%s]", r1.getAsm(), r2.getAsm()));
             return Register.EAX;
         }
     }
@@ -1086,8 +1292,7 @@ public class CodeGenerator {
 
         for (Field f : c.getDeclaredFields()) {
             if (Modifier.isStatic(f.getModifiers())) {
-                curSrc.global(f.getUniqueName());
-                curSrc.resd(f.getUniqueName());
+                curSrc.gresd(f.getUniqueName());
             }
         }
     }
@@ -1096,6 +1301,18 @@ public class CodeGenerator {
         // by our calling convention, "this" is stored at EBP + 8
         RegisterExpression re = new RegisterExpression();
         re.set(Register.EBP, Operator.PLUS, 8);
+        return re;
+    }
+
+    public RegisterExpression getVtableAddress(Register instanceAddr) {
+        RegisterExpression re = new RegisterExpression();
+        re.set(instanceAddr, Operator.PLUS, 4);
+        return re;
+    }
+
+    public RegisterExpression getMethodAddress(Register vtableAddress, int methodIndex) {
+        RegisterExpression re = new RegisterExpression();
+        re.set(vtableAddress, Operator.PLUS, methodIndex * 4);
         return re;
     }
 }

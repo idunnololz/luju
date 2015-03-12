@@ -22,6 +22,8 @@ public class Class extends HashMap<String, Object> {
     private List<Field> declaredFields = new ArrayList<>();
     private List<Constructor> declaredConstructors = new ArrayList<>();
 
+    private Map<Interface, Integer> interfaceToIndex = new HashMap<>();
+
     private Package thisPackage;
     private int modifiers;
     private TypeDecl classDecl;
@@ -36,10 +38,15 @@ public class Class extends HashMap<String, Object> {
 
     private boolean isComplete = false;
 
-    private static int LAST_ID = 0;
+    private static int LAST_ID = 1;
     private final int id;
 
     private int numUniqueMethods; // does not include overriden methods
+    private boolean cached;
+
+    public static void reset() {
+        LAST_ID = 1;
+    }
 
     protected Class() {
         id = -1;
@@ -342,18 +349,28 @@ public class Class extends HashMap<String, Object> {
         this.numUniqueMethods = numUniqueMethods;
     }
 
+    public void addInterfaceIndex(Interface interf, int index) {
+        interfaceToIndex.put(interf, index);
+    }
+
+    public int getInterfaceIndex(Interface i) {
+        return interfaceToIndex.get(i);
+    }
+
     private List<Field> completeFieldList;
     private LinkedList<Field> completeNonStaticFields;
     private Map<Field, Integer> fieldToIndex;
 
     private List<Method> completeMethodList;
     private ArrayList<Method> completeNonStaticMethods;
+    private Map<Method, Integer> methodToIndex;
 
     private String vtableLabel;
 
     private boolean codeGenInfoGenerated = false;
 
     public void generateDataForCodeGeneration() {
+
         if (codeGenInfoGenerated) return;
 
         int methods = getNumUniqueNonStaticMethods();
@@ -367,15 +384,15 @@ public class Class extends HashMap<String, Object> {
             completeNonStaticMethods.add(null);
         }
 
-
         fieldToIndex = new HashMap<>();
+        methodToIndex = new HashMap<>();
         Class thisClass = this;
         do {
+            if (isInterface() && thisClass == BaseEnvironment.TYPE_OBJECT) break;
             for (Field f : thisClass.getDeclaredFields()) {
                 fieldList.addFirst(f);
 
                 if (!Modifier.isStatic(f.getModifiers())) {
-                    fieldToIndex.put(f, completeNonStaticFields.size());
                     completeNonStaticFields.addFirst(f);
                 }
             }
@@ -383,10 +400,19 @@ public class Class extends HashMap<String, Object> {
                 methodList.addFirst(env.lookupMethod(m.getMethodSignature()));
 
                 if (!Modifier.isStatic(m.getModifiers())) {
-                    completeNonStaticMethods.set(m.getMethodIndex(), m);
+                    int index = m.getMethodIndex();
+                    if (completeNonStaticMethods.get(index) == null) {
+                        completeNonStaticMethods.set(index, m);
+                        methodToIndex.put(m, index);
+                    }
                 }
             }
         } while ((thisClass = thisClass.getSuperClass()) != null);
+
+        int i = 0;
+        for (Field f : completeNonStaticFields) {
+            fieldToIndex.put(f, i++);
+        }
 
         completeFieldList = fieldList;
         completeMethodList = methodList;
@@ -400,6 +426,15 @@ public class Class extends HashMap<String, Object> {
         Integer i;
         if ((i = fieldToIndex.get(f)) == null) {
             throw new RuntimeException("Field " + f.getName() + " index not found in class " + getCanonicalName());
+        }
+        return i;
+    }
+
+    public int getMethodIndex(Method m) {
+        generateDataForCodeGeneration();
+        Integer i;
+        if ((i = methodToIndex.get(m)) == null) {
+            throw new RuntimeException("Method " + m.getName() + " index not found in class " + getCanonicalName());
         }
         return i;
     }
@@ -427,5 +462,17 @@ public class Class extends HashMap<String, Object> {
     public List<Method> getCompleteNonStaticMethodList() {
         generateDataForCodeGeneration();
         return completeNonStaticMethods;
+    }
+
+    public void setCached(boolean cached) {
+        this.cached = cached;
+    }
+
+    public boolean isCached() {
+        return cached;
+    }
+
+    public String getUniqueLabel() {
+        return getCanonicalName();
     }
 }

@@ -1,6 +1,7 @@
 package com.ggstudios.types;
 
 import com.ggstudios.utils.PrintUtils;
+import com.ggstudios.env.Class;
 
 public class Expression extends AstNode {
     public static final int ARRAY_ACCESS_EXPRESSION         = 1;
@@ -20,6 +21,8 @@ public class Expression extends AstNode {
     private boolean enclosedInParen = false;
 
     private int type;
+
+    private Class classType;
 
     protected void setType(int type) {
         this.type = type;
@@ -48,5 +51,13 @@ public class Expression extends AstNode {
 
     public void setEnclosedInParen(boolean enclosedInParen) {
         this.enclosedInParen = enclosedInParen;
+    }
+
+    public Class getClassType() {
+        return classType;
+    }
+
+    public void setClassType(Class classType) {
+        this.classType = classType;
     }
 }

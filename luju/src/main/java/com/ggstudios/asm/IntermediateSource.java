@@ -1,5 +1,8 @@
 package com.ggstudios.asm;
 
+import com.ggstudios.env.BaseEnvironment;
+import com.ggstudios.env.Class;
+
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Stack;
@@ -12,6 +15,7 @@ public class IntermediateSource {
     private StringBuilder[] sections;
     private Set<String> externs = new HashSet<>();
     private Set<String> labels = new HashSet<>();
+    private Set<String> toResolve = new HashSet<>();
 
     private Stack<Integer> savePoints = new Stack<>();
 
@@ -71,6 +75,10 @@ public class IntermediateSource {
         return ".l" + localLabelCount++;
     }
 
+    public String getFreshContextFreeLabel() {
+        return "..@l" + localLabelCount++;
+    }
+
     public void setActiveSectionId(int sectionId) {
         activeSectionId = sectionId;
     }
@@ -79,7 +87,13 @@ public class IntermediateSource {
         if (label.charAt(0) == '.') return;
 
         if (!labels.contains(label)) {
-            externs.add(label);
+            toResolve.add(label);
+        }
+    }
+
+    public void addLabel(String label) {
+        if (!labels.add(label)) {
+            throw new RuntimeException("Duplicate label defined: " + label);
         }
     }
 
@@ -88,7 +102,7 @@ public class IntermediateSource {
     }
 
     public void global(String label) {
-        labels.add(label);
+        addLabel(label);
         getActiveSectionId()
                 .append("\tglobal\t")
                 .append(label)
@@ -96,7 +110,7 @@ public class IntermediateSource {
     }
 
     public void glabel(String label) {
-        labels.add(label);
+        addLabel(label);
         getActiveSectionId()
                 .append("\tglobal\t")
                 .append(label)
@@ -106,7 +120,7 @@ public class IntermediateSource {
     }
 
     public void label(String label) {
-        labels.add(label);
+        addLabel(label);
         getActiveSectionId()
                 .append(label)
                 .append(":\n");
@@ -139,6 +153,12 @@ public class IntermediateSource {
     public String toString() {
         StringBuilder sb = new StringBuilder();
 
+        for (String s : toResolve) {
+            if (!labels.contains(s)) {
+                externs.add(s);
+            }
+        }
+
         for (String s : externs) {
             sb.append("extern ");
             sb.append(s);
@@ -155,8 +175,18 @@ public class IntermediateSource {
         return sb.toString();
     }
 
+    public void gresd(String name) {
+        addLabel(name);
+        getActiveSectionId()
+                .append("\tglobal\t")
+                .append(name)
+                .append('\n')
+                .append(name)
+                .append(":\t resd 1\n");
+    }
+
     public void resd(String name) {
-        labels.add(name);
+        addLabel(name);
         getActiveSectionId()
                 .append(name)
                 .append(":\t resd 1\n");
@@ -224,6 +254,20 @@ public class IntermediateSource {
                 .append(r1.toString())
                 .append("], ")
                 .append(r2.getAsm())
+                .append('\n');
+    }
+
+    public void movRef(RegisterExpression r1, String label) {
+        if (r1.isLabel()) {
+            linkLabel(r1.getLabel());
+        }
+        linkLabel(label);
+
+        getActiveSectionId()
+                .append("\tmov \tdword [")
+                .append(r1.toString())
+                .append("], ")
+                .append(label)
                 .append('\n');
     }
 
@@ -363,7 +407,7 @@ public class IntermediateSource {
 
     public void extern(String label) {
         externs.add(label);
-        labels.add(label);
+        addLabel(label);
     }
 
     public void call(String label) {
@@ -375,8 +419,16 @@ public class IntermediateSource {
                 .append('\n');
     }
 
+    public void call(Register r1) {
+        bpOffset += 4;
+        getActiveSectionId()
+                .append("\tcall\t")
+                .append(r1.getAsm())
+                .append('\n');
+    }
+
     public void db(String label, String s) {
-        labels.add(label);
+        addLabel(label);
         getActiveSectionId()
                 .append(label)
                 .append("\tdb\t")
@@ -518,5 +570,44 @@ public class IntermediateSource {
                 .append(", [")
                 .append(complexExpression)
                 .append("]\n");
+    }
+
+    public void neg(Register r) {
+        getActiveSectionId()
+                .append("\tneg \t")
+                .append(r.getAsm())
+                .append("\n");
+    }
+
+    public void declareString(String label, String str) {
+        StringBuilder sb = getActiveSectionId();
+
+        Class o = BaseEnvironment.TYPE_CHAR.getArrayClass();
+        linkLabel(o.getUniqueLabel());
+        linkLabel(o.getVtableLabel());
+
+        sb.append(label)
+                .append(":\n")
+                .append("\tdd  \t")
+                .append(o.getUniqueLabel())
+                .append("\n\tdd  \t")
+                .append(o.getVtableLabel())
+                .append("\n\tdd  \t")
+                .append(str.length());
+
+        if (str.length() != 0) {
+            sb.append("\n\tdd  \t");
+            for (int i = 0; i < str.length(); i++) {
+                sb.append("0x");
+                sb.append(Integer.toHexString((int) str.charAt(i)));
+                sb.append(", ");
+            }
+            sb.setLength(sb.length() - 2);
+        }
+        sb.append("\n");
+    }
+
+    public void setBpOffset(int bpOffset) {
+        this.bpOffset = bpOffset;
     }
 }

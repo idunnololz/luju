@@ -51,16 +51,137 @@ public class AssemblerUtils {
 
     private static final String UTILS_SOURCE =
             "extern __exception\n" +
+                    "extern java.lang.Object$vt\n" +
+                    "extern java.lang.Object\n" +
                     "\n" +
                     "section .text\n" +
+                    "\n" +
                     "; check if index ebx is valid for array at eax\n" +
                     "\tglobal __arrayBoundCheck\n" +
                     "__arrayBoundCheck:\n" +
-                    "\tcmp [eax], ebx\n" +
-                    "\tjle .outOfBounds\n" +
+                    "\tcmp \t[eax+8], ebx\n" +
+                    "\tjle \t.outOfBounds\n" +
                     "\tret\n" +
                     ".outOfBounds:\n" +
-                    "\tcall __exception";
+                    "\tcall\t__exception\n" +
+                    "\t\n" +
+                    "\tglobal __divideCheck\n" +
+                    "__divideCheck:\n" +
+                    "\ttest \tebx, ebx\n" +
+                    "\tje  \t.divisionByZero\n" +
+                    "\tret\n" +
+                    ".divisionByZero:\n" +
+                    "\tcall\t__exception\n" +
+                    "\t\n" +
+                    "; eax = address to zero, ebx = length (in DWORDs)\n" +
+                    "; note that the actual length in bytes is ebx * 4 + 4 (for the length field)\n" +
+                    "\tglobal __zeroArray\n" +
+                    "__zeroArray:\n" +
+                    "\tpush\teax\n" +
+                    "\tpush\tecx\n" +
+                    "\tpush\tedx\n" +
+                    "\tmov\t\tecx, ebx\n" +
+                    "\tadd \tecx, 3\n" +
+                    "\txor \tedx, edx\n" +
+                    ".loop:\n" +
+                    "\tmov \t[eax], edx\n" +
+                    "\tadd     eax, 4\n" +
+                    "\tsub\t\tecx, 1\n" +
+                    "\tjnz \t.loop\n" +
+                    "\tpop \tedx\n" +
+                    "\tpop \tecx\n" +
+                    "\tpop \teax\n" +
+                    "\tret\n" +
+                    "\t\n" +
+                    "; check if type eax is of type ebx\n" +
+                    "\tglobal __instanceOf\n" +
+                    "__instanceOf:\n" +
+                    "\tpush\tebp\n" +
+                    "\tmov \tebp, esp\n" +
+                    "\t\n" +
+                    "\tsub \tesp, 12\t; create 3 local variables...\n" +
+                    "\t\t\t\t\t; -4 = a, -8 = t, -12 = i\n" +
+                    "\tmov \teax, [ebp+8]\n" +
+                    "\tmov \tebx, [ebp+12]\n" +
+                    "\tmov\t\t[ebp-4], eax\n" +
+                    "\tcmp \teax, ebx\n" +
+                    "\tjne\t\t.start\n" +
+                    "\tmov \teax, 1\n" +
+                    "\tjmp \t.exit\n" +
+                    ".start:\n" +
+                    "\tlea \tecx, [eax+8]\n" +
+                    "\tmov \t[ebp-8], ecx\n" +
+                    "\tmov \tdword [ebp-12], 0\n" +
+                    "\tjmp \t.forCond\n" +
+                    ".forUpdate:\n" +
+                    "\tmov \teax, [ebp-12]\n" +
+                    "\tadd \teax, 1\n" +
+                    "\tmov \t[ebp-12], eax\n" +
+                    ".forCond: \n" +
+                    "\tmov \teax, [ebp-4]\n" +
+                    "\tmov \tecx, [ebp-12]\n" +
+                    "\tcmp \tecx, dword [eax+4]\n" +
+                    "\tjge\t\t.false\n" +
+                    "\t\n" +
+                    "\tpush  \tebx\n" +
+                    "\tmov \teax, [ebp-8]\n" +
+                    "\tmov \teax, [eax]\n" +
+                    "\tpush\teax\n" +
+                    "\tcall\t__instanceOf\n" +
+                    "\tadd \tesp, 8\n" +
+                    "\ttest\teax, eax\n" +
+                    "\tje\t\t.continue\n" +
+                    "\tmov \teax, 1\n" +
+                    "\tjmp \t.exit\n" +
+                    ".continue:\n" +
+                    "\tmov \teax, [ebp-8]\n" +
+                    "\tadd \teax, 8\n" +
+                    "\tmov \t[ebp-8], eax\n" +
+                    "\tjmp \t.forUpdate\n" +
+                    ".false:\n" +
+                    "\tmov \teax, 0\n" +
+                    ".exit:\n" +
+                    "\tmov \tesp, ebp\n" +
+                    "\tpop \tebp\n" +
+                    "\tret\n" +
+                    "\t\n" +
+                    "\t\n" +
+                    "\t\n" +
+                    "; define primitive array class structure\n" +
+                    "\tglobal int#Array\n" +
+                    "int#Array:\n" +
+                    "\tdd\tjava.lang.Object$vt\n" +
+                    "\tdd\t1\n" +
+                    "\tdd\tjava.lang.Object\n" +
+                    "\tdd\t0\n" +
+                    "\tglobal short#Array\n" +
+                    "short#Array:\n" +
+                    "\tdd\tjava.lang.Object$vt\n" +
+                    "\tdd\t1\n" +
+                    "\tdd\tjava.lang.Object\n" +
+                    "\tdd\t0\n" +
+                    "\tglobal char#Array\n" +
+                    "char#Array:\n" +
+                    "\tdd\tjava.lang.Object$vt\n" +
+                    "\tdd\t1\n" +
+                    "\tdd\tjava.lang.Object\n" +
+                    "\tdd\t0\n" +
+                    "\tglobal boolean#Array\n" +
+                    "boolean#Array:\n" +
+                    "\tdd\tjava.lang.Object$vt\n" +
+                    "\tdd\t1\n" +
+                    "\tdd\tjava.lang.Object\n" +
+                    "\tdd\t0\n" +
+                    "\tglobal byte#Array\n" +
+                    "byte#Array:\n" +
+                    "\tdd\tjava.lang.Object$vt\n" +
+                    "\tdd\t1\n" +
+                    "\tdd\tjava.lang.Object\n" +
+                    "\tdd\t0\n" +
+                    "\t\n" +
+                    "\t\n" +
+                    "\t\n" +
+                    "\t";
 
     private static final String HELPER_WINDOWS_SOURCE = "extern _GetStdHandle@4\n" +
             "extern _WriteConsoleA@20\n" +

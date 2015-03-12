@@ -13,21 +13,31 @@ public class Method {
     private static final HashMap<String, Integer> nameCount = new HashMap<>();
 
     private Method overrideMethod;
-    private int methodIndex = -1;
+    private int methodId = -1;
 
     private final Class declaringClass;
     private final MethodDecl methodDecl;
     private String name;
     protected String uniqueName;
+    protected Environment env;
 
     private Class returnType;
     private Class[] parameterTypes;
 
     private int modifiers;
 
-    public Method(Class declaringClass, MethodDecl methodDecl, CompositeEnvironment env) {
+    public static void reset() {
+        nameCount.clear();
+    }
+
+    public Method(Method toCopy) {
+        this(toCopy.getDeclaringClass(), toCopy.getMethodDecl(), toCopy.env);
+    }
+
+    public Method(Class declaringClass, MethodDecl methodDecl, Environment env) {
         this.declaringClass = declaringClass;
         this.methodDecl = methodDecl;
+        this.env = env;
         name = methodDecl.getMethodName().getRaw();
 
         try {
@@ -144,11 +154,34 @@ public class Method {
         this.overrideMethod = overrideMethod;
     }
 
-    public int getMethodIndex() {
-        return methodIndex;
+    private int METHOD_INDEX_MASK = 0x0000FFFF;
+    private int METHOD_INTERFACE_MASK = 0xFFFF0000;
+
+    public int getMethodId() {
+        return methodId;
     }
 
-    public void setMethodIndex(int methodIndex) {
-        this.methodIndex = methodIndex;
+    public int getMethodIndex() {
+        return METHOD_INDEX_MASK & methodId;
+    }
+
+    public void setMethodId(int methodId) {
+        this.methodId = methodId;
+    }
+
+    public void setMethodIndex(int index) {
+        methodId = (methodId & METHOD_INTERFACE_MASK) + index;
+    }
+
+    public void setInterfaceId(int id) {
+        methodId = (methodId & METHOD_INDEX_MASK) + (id << 16);
+    }
+
+    public int getInterfaceId() {
+        return (methodId & METHOD_INTERFACE_MASK) >> 16;
+    }
+
+    public boolean isInterfaceMethod() {
+        return getInterfaceId() != 0;
     }
 }

@@ -112,4 +112,8 @@ public class Constructor {
     public ConstructorDecl getConstructorDecl() {
         return constructorDecl;
     }
+
+    public Class[] getParameterTypes() {
+        return parameterTypes;
+    }
 }

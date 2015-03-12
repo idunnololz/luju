@@ -18,6 +18,10 @@ public class Field {
     private int modifiers;
     private boolean initialized = false;
 
+    public static void reset() {
+        nameCount.clear();
+    }
+
     protected Field() {}
 
     public Field(Class declaringClass, VarDecl vDecl, Environment env) {

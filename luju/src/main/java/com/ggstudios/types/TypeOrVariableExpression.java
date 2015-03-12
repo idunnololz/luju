@@ -1,5 +1,6 @@
 package com.ggstudios.types;
 
+import com.ggstudios.env.Field;
 import com.ggstudios.luju.Token;
 
 import java.util.List;
@@ -7,6 +8,7 @@ import java.util.List;
 public class TypeOrVariableExpression extends Expression {
     private String[] stringArr;
     private String string;
+    private List<Field> proper;
 
     public TypeOrVariableExpression(List<Token> type) {
         setType(TYPE_OR_VARIABLE_EXPRESSION);
@@ -32,5 +34,13 @@ public class TypeOrVariableExpression extends Expression {
     @Override
     public String toString() {
         return string;
+    }
+
+    public void setProper(List<Field> proper) {
+        this.proper = proper;
+    }
+
+    public List<Field> getProper() {
+        return proper;
     }
 }

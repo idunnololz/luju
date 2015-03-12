@@ -10,6 +10,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
 
 public class Assembler {
 
@@ -30,6 +33,8 @@ public class Assembler {
     private Process proc;
 
     private boolean initialized = false;
+
+    private Queue<String> unread = new LinkedList<>();
 
     public static class Builder {
         private Os os = Os.LINUX;
@@ -67,7 +72,11 @@ public class Assembler {
                 String s;
                 try {
                     while ((s = in.readLine()) != null) {
-                            Print.ln(s);
+                        synchronized (unread) {
+                            unread.add(s);
+                            unread.notify();
+                        }
+                        Print.ln(s);
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -168,6 +177,19 @@ public class Assembler {
 
         if (outputThread.isAlive()) {
             proc.destroy();
+        }
+    }
+
+    public String getResult() {
+        synchronized (unread) {
+            while (unread.size() == 0) {
+                try {
+                    unread.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            return unread.poll();
         }
     }
 }

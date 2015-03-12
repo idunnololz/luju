@@ -52,6 +52,7 @@ import com.ggstudios.types.VarInitDecl;
 import com.ggstudios.types.VariableExpression;
 import com.ggstudios.types.WhileStatement;
 import com.ggstudios.utils.ClassUtils;
+import com.ggstudios.utils.Print;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -507,6 +508,7 @@ public class NameResolver {
                             BaseEnvironment.TYPE_INT, indexType);
                 }
                 inStaticContext = false;
+                ex.setClassType(varType.getSuperClass());
                 return varType.getSuperClass();
             }
             case Expression.ARRAY_CREATION_EXPRESSION: {
@@ -518,6 +520,7 @@ public class NameResolver {
                             BaseEnvironment.TYPE_INT, indexType);
                 }
                 inStaticContext = false;
+                ex.setClassType(varType.getArrayClass());
                 return varType.getArrayClass();
             }
             case Expression.ASSIGN_EXPRESSION: {
@@ -565,12 +568,14 @@ public class NameResolver {
                 Class lhsType = resolveExpression(lhsExpr, env);
                 inStaticContext = b;
                 Class rhsType = resolveExpression(assign.getRhs(), env);
-                inStaticContext = b;
+                // we don't restore context because this could be part of a field expression
+                // we let statements handle his if it's not a field expression
 
                 if (!Class.isValidAssign(lhsType, rhsType)) {
                     throw new IncompatibleTypeException(curClass.getFileName(), ex,
                             lhsType, rhsType);
                 }
+                ex.setClassType(lhsType);
                 return lhsType;
             }
             case Expression.BINARY_EXPRESSION: {
@@ -593,6 +598,7 @@ public class NameResolver {
                                             l.getCanonicalName(),
                                             r.getCanonicalName()));
                         }
+                        ex.setClassType(BaseEnvironment.TYPE_BOOLEAN);
                         return BaseEnvironment.TYPE_BOOLEAN;
                     case PIPE:
                     case PIPE_PIPE:
@@ -605,6 +611,7 @@ public class NameResolver {
                                             l.getCanonicalName(),
                                             r.getCanonicalName()));
                         }
+                        ex.setClassType(BaseEnvironment.TYPE_BOOLEAN);
                         return BaseEnvironment.TYPE_BOOLEAN;
                     case EQ_EQ:
                     case NEQ:
@@ -614,11 +621,14 @@ public class NameResolver {
                                             l.getCanonicalName(),
                                             r.getCanonicalName()));
                         }
+                        ex.setClassType(BaseEnvironment.TYPE_BOOLEAN);
                         return BaseEnvironment.TYPE_BOOLEAN;
                     case PLUS:
                         if ((l == BaseEnvironment.TYPE_STRING || r == BaseEnvironment.TYPE_STRING) &&
-                                (l != BaseEnvironment.TYPE_VOID && r != BaseEnvironment.TYPE_VOID))
+                                (l != BaseEnvironment.TYPE_VOID && r != BaseEnvironment.TYPE_VOID)) {
+                            ex.setClassType(BaseEnvironment.TYPE_STRING);
                             return BaseEnvironment.TYPE_STRING;
+                        }
                         if (Class.getCategory(l) != Class.CATEGORY_NUMBER || Class.getCategory(r) != Class.CATEGORY_NUMBER) {
                             throw new TypeException(curClass.getFileName(), ex,
                                     String.format("Operator '%s' cannot be applied to '%s', '%s'",
@@ -626,6 +636,7 @@ public class NameResolver {
                                             l.getCanonicalName(),
                                             r.getCanonicalName()));
                         }
+                        ex.setClassType(BaseEnvironment.TYPE_INT);
                         return BaseEnvironment.TYPE_INT;
                     case MINUS:
                     case STAR:
@@ -638,11 +649,13 @@ public class NameResolver {
                                             l.getCanonicalName(),
                                             r.getCanonicalName()));
                         }
+                        ex.setClassType(BaseEnvironment.TYPE_INT);
                         return BaseEnvironment.TYPE_INT;
                     case INSTANCEOF:
                         if (l.isSimple()) {
                             throw new InconvertibleTypeException(curClass.getFileName(), ex, l, r);
                         }
+                        ex.setClassType(BaseEnvironment.TYPE_BOOLEAN);
                         return BaseEnvironment.TYPE_BOOLEAN;
                     default:
                         throw new RuntimeException(
@@ -674,6 +687,7 @@ public class NameResolver {
                 instanceCreation.setProper(c);
                 ensureCorrectAccess(c);
                 inStaticContext = false;
+                ex.setClassType(type);
                 return type;
             }
             case Expression.LITERAL_EXPRESSION: {
@@ -681,6 +695,7 @@ public class NameResolver {
                 if (literalExpression.getLiteral().getType() == Token.Type.SEMI) return null;
                 Literal lit = new Literal(literalExpression.getLiteral(), env);
                 literalExpression.setProper(lit);
+                ex.setClassType(lit.getType());
                 return lit.getType();
             }
             case Expression.METHOD_EXPRESSION: {
@@ -700,13 +715,18 @@ public class NameResolver {
                     boolean methodAccessFromVariable = true;
                     boolean staticContext = false;
                     if (e.getExpressionType() == Expression.TYPE_OR_VARIABLE_EXPRESSION) {
-                        Object o = getFieldOrType((TypeOrVariableExpression) e, env);
+                        TypeOrVariableExpression typeOrVariableExpression = (TypeOrVariableExpression) e;
+                        Object o = getFieldOrType(typeOrVariableExpression, env);
                         if (o instanceof Class) {
                             type = (Class) o;
                             methodAccessFromVariable = false;
                             staticContext = true;
                         } else {
                             type = ((Field)o).getType();
+
+                            List<Field> lookupTrace = new ArrayList<>(Environment.getLookupTrace());
+                            lookupTrace.add((Field)o);
+                            typeOrVariableExpression.setProper(lookupTrace);
                         }
                     } else {
                         type = resolveExpression(e, env);
@@ -741,7 +761,6 @@ public class NameResolver {
                     m = env.lookupMethod(methSig);
 
                     if (inStaticContext) {
-
                         if (!Modifier.isStatic(m.getModifiers())) {
                             throw new EnvironmentException("Static method referenced from non static context",
                                     EnvironmentException.ERROR_STATIC_METHOD_FROM_NON_STATIC_CONTEXT,
@@ -750,7 +769,7 @@ public class NameResolver {
                     }
                     if (Modifier.isStatic(m.getModifiers())) {
                         throw new TypeException(curClass.getFileName(), meth,
-                                String.format("Static method '%s' cannot be referenced from non-static context",
+                                String.format("(JOOS) Static method referenced '%s' without naming the class",
                                         m.getName()));
                     }
                 }
@@ -761,12 +780,15 @@ public class NameResolver {
                                 m);
                     }
                 }
+                meth.setProper(m);
+                ex.setClassType(m.getReturnType());
                 return m.getReturnType();
             }
             case Expression.REFERENCE_TYPE: {
                 ReferenceType refType = (ReferenceType) ex;
                 Class type = env.lookupClazz(refType);
                 refType.setProper(type);
+                ex.setClassType(type);
                 return type;
             }
             case Expression.THIS_EXPRESSION: {
@@ -775,6 +797,7 @@ public class NameResolver {
                             String.format("'%s' cannot be referenced from a static context",
                                     curClass.getCanonicalName() + ".this"));
                 }
+                ex.setClassType(curClass);
                 return curClass;
             }
             case Expression.UNARY_EXPRESSION: {
@@ -786,6 +809,7 @@ public class NameResolver {
                         throw new InconvertibleTypeException(curClass.getFileName(), unary,
                                 castType, k);
                     }
+                    ex.setClassType(castType);
                     return castType;
                 }
 
@@ -795,12 +819,14 @@ public class NameResolver {
                             throw new TypeException(curClass.getFileName(), unary,
                                    String.format("Operator '!' cannot be applied to '%s'", k.getName()));
                         }
+                        ex.setClassType(BaseEnvironment.TYPE_BOOLEAN);
                         return BaseEnvironment.TYPE_BOOLEAN;
                     case MINUS:
                         if (Class.getCategory(k) != Class.CATEGORY_NUMBER) {
                             throw new TypeException(curClass.getFileName(), unary,
                                     String.format("Operator '-' cannot be applied to '%s'", k.getName()));
                         }
+                        ex.setClassType(k);
                         return k;
                     default:
                         throw new RuntimeException(
@@ -827,6 +853,7 @@ public class NameResolver {
 
                 inStaticContext = false;
 
+                ex.setClassType(f.getType());
                 return f.getType();
             }
             default:
@@ -860,9 +887,11 @@ public class NameResolver {
                 }
                 Environment.setLookupTrace(lookupTrace);
             }
+            typeOrVar.setClassType(f.getType());
             return f;
         } else if (res instanceof Class) {
             inStaticContext = true;
+            typeOrVar.setClassType((Class) res);
             return res;
         } else {
             String fullName = typeOrVar.toString();
@@ -1039,7 +1068,7 @@ public class NameResolver {
             int i = 0;
             for (Method m : BaseEnvironment.TYPE_OBJECT.getDeclaredMethods()) {
                 if (!Modifier.isStatic(m.getModifiers())) {
-                    m.setMethodIndex(i++);
+                    m.setMethodId(i++);
                 }
             }
             BaseEnvironment.TYPE_OBJECT.setNumUniqueMethods(i);
@@ -1082,28 +1111,70 @@ public class NameResolver {
                 mergeClass(c, superClass);
             }
 
+            int index = superClass.getNumUniqueNonStaticMethods();
+
+            Interface interf = null;
+            if (c.isInterface()) {
+                index = 0;
+                interf = (Interface) c;
+
+                for (Method m : c.getDeclaredMethods()) {
+                    m.setMethodId(-1);
+                }
+            }
+
+            for (Class i : interfaces) {
+                int overrides = getMarkInterfaceMethods(c, i);
+                index -= overrides;
+
+                Print.ln(String.format("Class '%s' overrides %d methods from '%s'",
+                        c.getName(), overrides, i.getName()));
+            }
+
+            for (Method m : c.getDeclaredMethods()) {
+                if (!Modifier.isStatic(m.getModifiers()) && m.getMethodId() == -1) {
+                    m.setMethodId(index++);
+                    if (c.isInterface()) {
+                        m.setInterfaceId(interf.getId());
+                    }
+                }
+            }
+
             int nonStaticMethodCount = 0;
             for (Class i : interfaces) {
+                c.addInterfaceIndex((Interface) i, index + nonStaticMethodCount);
+
                 if (!i.isInterface()) {
                     throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
                             "Cannot extend class");
                 }
                 mergeClass(c, i);
 
-                nonStaticMethodCount += i.getNumUniqueNonStaticMethods() - objectMethods;
+                nonStaticMethodCount += i.getNumUniqueNonStaticMethods();
             }
 
-            int index = superClass.getNumUniqueNonStaticMethods();
-            for (Method m : c.getDeclaredMethods()) {
-                if (!Modifier.isStatic(m.getModifiers()) && m.getMethodIndex() == -1) {
-                    m.setMethodIndex(index++);
-                }
-            }
             c.setNumUniqueMethods(index + nonStaticMethodCount);
 
             c.setIsComplete(true);
             toResolve.pop();
         }
+    }
+
+    private int getMarkInterfaceMethods(Class mainClass, Class interf) {
+        int overrides = 0;
+        for (Map.Entry<String, Object> entry : interf.entrySet()) {
+            Object val = entry.getValue();
+            if (!(val instanceof Method)) continue;
+            Method oldMeth = (Method) val;
+            if (mainClass.containsKey(entry.getKey())) {
+                Method newMeth = (Method) mainClass.get(entry.getKey());
+                if (oldMeth.isInterfaceMethod()) {
+                    newMeth.setMethodId(0);
+                    overrides++;
+                }
+            }
+        }
+        return overrides;
     }
 
     private void mergeClass(Class c, Class toMerge) {
@@ -1158,7 +1229,12 @@ public class NameResolver {
                     }
 
                     newMeth.setOverrideMethod(oldMeth);
-                    newMeth.setMethodIndex(oldMeth.getMethodIndex());
+                    if (oldMeth.isInterfaceMethod()) {
+                        Interface i = Interface.getInterfaceForId(oldMeth.getInterfaceId());
+                        newMeth.setMethodId(oldMeth.getMethodIndex() + c.getInterfaceIndex(i));
+                    } else {
+                        newMeth.setMethodId(oldMeth.getMethodId());
+                    }
                 }
             } else {
                 if (val instanceof Method) {
@@ -1168,15 +1244,18 @@ public class NameResolver {
                             throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
                                     String.format("Class '%s' must either be declared abstract or implement method '%s' in '%s'",
                                             c.getName(), m.getHumanReadableSignature(), toMerge.getName()));
-                        } else {
-                            c.put(entry.getKey(), entry.getValue());
                         }
-                    } else {
-                        c.put(entry.getKey(), entry.getValue());
+
+                        if (m.isInterfaceMethod()) {
+                            Method copy = new Method(m);
+                            Interface i = Interface.getInterfaceForId(m.getInterfaceId());
+                            copy.setMethodId(m.getMethodIndex() + c.getInterfaceIndex(i));
+                            c.putMethod(copy);
+                            continue;
+                        }
                     }
-                } else {
-                    c.put(entry.getKey(), entry.getValue());
                 }
+                c.put(entry.getKey(), val);
             }
         }
     }

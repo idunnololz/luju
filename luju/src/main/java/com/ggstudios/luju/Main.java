@@ -1,5 +1,6 @@
 package com.ggstudios.luju;
 
+import com.ggstudios.error.TestFailedException;
 import com.ggstudios.utils.FileUtils;
 import com.ggstudios.utils.Print;
 import com.ggstudios.utils.TestSuite;
@@ -28,6 +29,7 @@ public class Main {
                     "-d", STDLIB_DIR + "2.0/java"
                     //TEST_DIR + "Test.java"
             };
+            //a = new String[]{"-T", "5"};
         } else {
             a = args;
         }
@@ -124,6 +126,8 @@ public class Main {
             LuJuCompiler compiler = new LuJuCompiler(argList.maxThreads, argList.useCygwin);
             try {
                 result = compiler.compileWith(argList);
+            } catch (TestFailedException e) {
+              // we aren't testing so don't throw this...
             } finally {
                 compiler.shutdown();
             }

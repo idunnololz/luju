@@ -112,4 +112,14 @@ public class RegisterExpression {
     public String getLabel() {
         return label;
     }
+
+    public void dumpToSingleRegister(IntermediateSource source, Register r) {
+        if (!isUnary()) {
+            source.lea(r, this);
+        } else if (isLabel()) {
+            source.mov(r, this.toString());
+        } else if (!isRegisterUsed(r)) {
+            source.mov(r, this.toString());
+        }
+    }
 }

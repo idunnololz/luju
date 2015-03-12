@@ -1,5 +1,6 @@
 package com.ggstudios.utils;
 
+import com.ggstudios.error.TestFailedException;
 import com.ggstudios.luju.LuJuCompiler;
 import com.ggstudios.luju.Main;
 
@@ -50,7 +51,7 @@ public class TestSuite {
             }
         } catch (Exception e) {
             System.err.println(String.format("Exception running test %s", listOfFiles[i].getName()));
-            System.err.println(ExceptionUtils.exceptionToString(e));
+            e.printStackTrace();
         }
         System.out.println(String.format("Results: %d/%d %s", testPassed, testPassed + testFailed,
                 (testFailed + testPassed) == testCount ? "" : "Warning: Inconsistent test count"));
@@ -62,9 +63,9 @@ public class TestSuite {
         Main.ArgList args = new Main.ArgList(defaultTestArgs);
         args.fileNames.add(testFile.getCanonicalPath());
 
-        if (testFile.getName().startsWith("Je")) {
+        if (testFile.getName().startsWith("Je") || testFile.getName().startsWith("J1e")) {
             // this test should output an error...
-            if (compiler.compileWith(args) == 0) {
+            if (runTest(args) == 0) {
                 testFailed++;
                 System.out.println(String.format("[Fail] Erronous test %s", testFile.getName()));
             } else {
@@ -73,7 +74,7 @@ public class TestSuite {
             }
         } else {
             // this test should pass...
-            if (compiler.compileWith(args) == 0) {
+            if (runTest(args) == 0) {
                 testPassed++;
                 System.out.println(String.format("[Pass] Correct test %s", testFile.getName()));
             } else {
@@ -92,9 +93,9 @@ public class TestSuite {
             args.fileNames.add(f.getCanonicalPath());
         }
 
-        if (testDir.getName().startsWith("Je")) {
+        if (testDir.getName().startsWith("Je") || testDir.getName().startsWith("J1e")) {
             // this test should output an error...
-            if (compiler.compileWith(args) == 0) {
+            if (runTest(args) == 0) {
                 testFailed++;
                 System.out.println(String.format("[Fail] Erronous test %s", testDir.getName()));
             } else {
@@ -103,7 +104,7 @@ public class TestSuite {
             }
         } else {
             // this test should pass...
-            if (compiler.compileWith(args) == 0) {
+            if (runTest(args) == 0) {
                 testPassed++;
                 System.out.println(String.format("[Pass] Correct test %s", testDir.getName()));
             } else {
@@ -118,7 +119,21 @@ public class TestSuite {
         for (File f : files) {
             args.fileNames.add(f.getCanonicalPath());
         }
+    }
 
+    private int runTest(Main.ArgList args) {
+        int res = 0;
+        try {
+            res = compiler.compileWith(args);
+        } catch (TestFailedException e) {
+            if (e.getReturnCode() == 13) {
+                res = 1;
+            } else {
+                res = 1;
+                Print.e("Invalid test return code of: " + e.getReturnCode());
+            }
+        }
+        return res;
     }
 
 }

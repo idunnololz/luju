@@ -827,7 +827,18 @@ public class AstGenerator {
             if (rhs == ParseTable.TERM_MINUS) {
                 if (isDerivation(UNARY_INT_LIT_DERIVATION, unaryExpression.children.get(1))) {
                     Token t = getFirstTokensInTree(unaryExpression.children.get(1));
-                    t.setVal(t.getVal() * -1);
+                    if (t.getType() == Token.Type.INTLIT) {
+                        t.setVal(t.getVal() * -1);
+                    } else if (t.getType() == Token.Type.CHARLIT) {
+                        UnaryExpression expr = new UnaryExpression();
+                        expr.setOp(unaryExpression.children.get(0).t);
+                        LiteralExpression lit = new LiteralExpression(t);
+                        expr.setExpression(lit);
+                        last.setExpression(expr);
+                        return first.getExpression();
+                    } else {
+                        throw new RuntimeException("Wtf");
+                    }
                     LiteralExpression lit = new LiteralExpression(t);
                     last.setExpression(lit);
                     return first.getExpression();
