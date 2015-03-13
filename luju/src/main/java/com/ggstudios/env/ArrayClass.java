@@ -15,7 +15,7 @@ public class ArrayClass extends Class {
     public ArrayClass(Class c) {
         Field lengthField = new Field(this, BaseEnvironment.TYPE_INT, "length", Modifier.FINAL);
         putField(lengthField);
-        fieldToIndex.put(lengthField, 2);
+        fieldToIndex.put(lengthField, 0);
 
         baseClass = c;
 

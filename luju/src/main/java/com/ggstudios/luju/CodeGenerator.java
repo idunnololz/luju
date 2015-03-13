@@ -422,7 +422,8 @@ public class CodeGenerator {
         curSrc.mov(Register.EAX, "[" + instanceAddr.toString() + "]");
 
         StringBuilder sb = new StringBuilder();
-        Register instanceR = Register.EAX;
+        Register fptr = Register.EAX;
+        curSrc.movRef(Register.EAX, getFieldsAddress(Register.EAX));
 
         for (Field f : c.getDeclaredFields()) {
             if (Modifier.isStatic(f.getModifiers())) continue;
@@ -430,7 +431,7 @@ public class CodeGenerator {
             VarDecl vd = f.getVarDecl();
 
             if (!(vd instanceof VarInitDecl)) {
-                RegisterExpression re = getReForField(Register.EAX, f);
+                RegisterExpression re = getReForField(fptr, f);
                 curSrc.movRef(re, 0);
             }
         }
@@ -441,7 +442,7 @@ public class CodeGenerator {
             VarDecl vd = f.getVarDecl();
 
             if (vd instanceof VarInitDecl) {
-                curSrc.push(instanceR);
+                curSrc.push(fptr);
                 VarInitDecl vid = (VarInitDecl) vd;
 
                 if (comment) {
@@ -452,9 +453,9 @@ public class CodeGenerator {
                 Register r2 = generateCodeForExpression(vid.getExpr());
                 Register r1 = Register.getNextRegisterFrom(r2);
                 curSrc.pop(r1);
-                instanceR = r1;
+                fptr = r1;
 
-                RegisterExpression re = getReForField(r1, f);
+                RegisterExpression re = getReForField(fptr, f);
 
                 curSrc.movRef(re, r2);
             }
@@ -639,26 +640,35 @@ public class CodeGenerator {
             case Expression.ARRAY_CREATION_EXPRESSION: {
                 ArrayCreationExpression arrayCreation = (ArrayCreationExpression) ex;
                 Register arraySize = generateCodeForExpression(arrayCreation.getDimExpr());
-                if (arraySize != Register.EAX) {
-                    curSrc.mov(Register.EAX, arraySize);
-                }
 
-                curSrc.mov(Register.EBX, Register.EAX);
+                RegisterExpression re = new RegisterExpression();
 
-                curSrc.add(Register.EAX, 3);    // for the length variable...
+                curSrc.push(arraySize);
+                curSrc.push(arraySize);
+
+                curSrc.mov(Register.EAX, 12);
+                curSrc.call("__malloc");
+
+                curSrc.pop(Register.EBX);
+                curSrc.push(Register.EAX);
+                curSrc.mov(Register.EAX, Register.EBX); // 1 field for length
+                curSrc.add(Register.EAX, 1);
                 curSrc.shl(Register.EAX, 2);
                 curSrc.call("__malloc");
                 curSrc.call("__zeroArray");
+                curSrc.pop(Register.EBX);
+                re.set(Register.EAX);
+                curSrc.pop(Register.EDX);
+                curSrc.movRef(re, Register.EDX);        // set length
+                curSrc.movRef(getFieldsAddress(Register.EBX), Register.EAX);
+                curSrc.mov(Register.EAX, Register.EBX);
 
                 Class o = arrayCreation.getClassType();
 
-                RegisterExpression re = new RegisterExpression();
                 re.set(Register.EAX);
                 curSrc.movRef(re, o.getUniqueLabel());
                 re.set(Register.EAX, Operator.PLUS, 4);
                 curSrc.movRef(re, o.getVtableLabel());
-                re.set(Register.EAX, Operator.PLUS, 8);
-                curSrc.movRef(re, Register.EBX);
 
                 return Register.EAX;
             }
@@ -886,7 +896,7 @@ public class CodeGenerator {
                 // Class memory structure:
                 // <cptr> -> class_info_table
                 // <vptr> -> vtable [+offset]
-                // [non-static-fields]
+                // <fptr> -> list_of_fields
 
                 Class c = instanceCreation.getType().getProper();
 
@@ -1120,8 +1130,7 @@ public class CodeGenerator {
 
         int fields = c.getCompleteNonStaticFields().size();
 
-        curSrc.mov(Register.EAX, fields + 2);
-        curSrc.shl(Register.EAX, 2);
+        curSrc.mov(Register.EAX, 12);
         curSrc.call("__malloc");
 
         RegisterExpression re = new RegisterExpression();
@@ -1130,6 +1139,12 @@ public class CodeGenerator {
         curSrc.movRef(getVtableAddress(Register.EAX), c.getVtableLabel());
 
         curSrc.push(Register.EAX);
+        curSrc.mov(Register.EAX, fields * POINTER_SIZE);
+        curSrc.call("__malloc");
+        curSrc.pop(Register.EBX);
+        curSrc.movRef(getFieldsAddress(Register.EBX), Register.EAX);
+
+        curSrc.push(Register.EBX);
         curSrc.call(constructor.getUniqueName());
         int argsCount = constructor.getParameterTypes().length + 1;
         curSrc.add(Register.ESP, argsCount * 4);
@@ -1169,16 +1184,9 @@ public class CodeGenerator {
             Register r = generateCodeForExpression(fVar.getPrefixExpr());
 
             Field f = fVar.getProper().get(0);
+            curSrc.movRef(r, getFieldsAddress(r));
             RegisterExpression re = getReForField(r, f);
 
-            //
-
-//            if (!f.getType().isPrimitive()) {
-//                curSrc.mov(Register.EAX, "dword [" + re.toString() + "]");
-//                re.set(Register.EAX);
-//            } else {
-//                curSrc.lea(r, re);
-//            }
             curSrc.lea(r, re);
 
             if (returnAddress) {
@@ -1235,6 +1243,7 @@ public class CodeGenerator {
                         curSrc.movRef(Register.EAX, re);
                     }
 
+                    curSrc.movRef(Register.EAX, getFieldsAddress(Register.EAX));
                     re = getReForField(Register.EAX, f);
 
                     curSrc.lea(Register.EAX, re);
@@ -1248,20 +1257,17 @@ public class CodeGenerator {
         return re;
     }
 
-    public RegisterExpression getReForField(Register objectRegister, Field field) {
+    public RegisterExpression getReForField(Register fptr, Field field) {
         RegisterExpression re = new RegisterExpression();
         int index = field.getDeclaringClass().getFieldIndex(field);
-        if (!field.getDeclaringClass().isArray()) {
-            index += OBJECT_OVERHEAD;
-        }
         if (index == 0) {
-            re.set(objectRegister);
+            re.set(fptr);
             return re;
         }
 
         index *= POINTER_SIZE;
 
-        re.set(objectRegister, Operator.PLUS, index);
+        re.set(fptr, Operator.PLUS, index);
 
         return re;
     }
@@ -1277,17 +1283,19 @@ public class CodeGenerator {
         r1 = Register.EAX;
         curSrc.pop(r1);
 
-        curSrc.call("__arrayBoundCheck");
+        // TODO
+        //curSrc.call("__arrayBoundCheck");
 
-        curSrc.add(r2, 3); // account for array header
+        curSrc.add(r2, 1); // account for length var
         curSrc.shl(r2, 2);
+        curSrc.movRef(r1, getFieldsAddress(r1));
 
+        RegisterExpression re = new RegisterExpression();
+        re.set(r1, Operator.PLUS, r2);
         if (returnAddress) {
-            RegisterExpression re = new RegisterExpression();
-            re.set(r1, Operator.PLUS, r2);
             return re;
         } else {
-            curSrc.mov(Register.EAX, String.format("dword [%s+%s]", r1.getAsm(), r2.getAsm()));
+            curSrc.movRef(Register.EAX, re);
             return Register.EAX;
         }
     }
@@ -1402,6 +1410,12 @@ public class CodeGenerator {
     public RegisterExpression getVtableAddress(Register instanceAddr) {
         RegisterExpression re = new RegisterExpression();
         re.set(instanceAddr, Operator.PLUS, 4);
+        return re;
+    }
+
+    public RegisterExpression getFieldsAddress(Register instanceAddr) {
+        RegisterExpression re = new RegisterExpression();
+        re.set(instanceAddr, Operator.PLUS, 8);
         return re;
     }
 

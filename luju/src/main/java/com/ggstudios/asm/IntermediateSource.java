@@ -619,6 +619,8 @@ public class IntermediateSource {
         linkLabel(o.getUniqueLabel());
         linkLabel(o.getVtableLabel());
 
+        String l = getFreshLabel();
+
         sb.append(label)
                 .append(":\n")
                 .append("\tdd  \t")
@@ -626,17 +628,21 @@ public class IntermediateSource {
                 .append("\n\tdd  \t")
                 .append(o.getVtableLabel())
                 .append("\n\tdd  \t")
-                .append(str.length());
+                .append(l);
 
-        if (str.length() != 0) {
-            sb.append("\n\tdd  \t");
-            for (int i = 0; i < str.length(); i++) {
-                sb.append("0x");
-                sb.append(Integer.toHexString((int) str.charAt(i)));
-                sb.append(", ");
-            }
-            sb.setLength(sb.length() - 2);
+
+        sb.append("\n")
+                .append(l)
+                .append(":\n\tdd  \t")
+                .append(str.length())
+                .append(", ");
+
+        for (int i = 0; i < str.length(); i++) {
+            sb.append("0x");
+            sb.append(Integer.toHexString((int) str.charAt(i)));
+            sb.append(", ");
         }
+        sb.setLength(sb.length() - 2);
         sb.append("\n");
     }
 
