@@ -121,7 +121,7 @@ public class LuJuCompiler {
         }
 
         if (args.isGenerateCode()) {
-            codeGenerator.generateCode(ast, assembler);
+            codeGenerator.generateCode(ast, assembler, args.commentAssembly);
         }
 
         return RETURN_CODE_SUCCESS;

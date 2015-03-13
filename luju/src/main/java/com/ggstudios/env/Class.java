@@ -43,6 +43,7 @@ public class Class extends HashMap<String, Object> {
 
     private int numUniqueMethods; // does not include overriden methods
     private boolean cached;
+    private int numOriginalMethods;
 
     public static void reset() {
         LAST_ID = 1;
@@ -489,5 +490,13 @@ public class Class extends HashMap<String, Object> {
 
     public String getUniqueLabel() {
         return getCanonicalName();
+    }
+
+    public void setNumOriginalMethods(int numOriginalMethods) {
+        this.numOriginalMethods = numOriginalMethods;
+    }
+
+    public int getNumOriginalMethods() {
+        return numOriginalMethods;
     }
 }

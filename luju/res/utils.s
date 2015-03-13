@@ -129,7 +129,8 @@ __checkCast:
 .continue:
 	; index = *t++;
 	mov 	eax, [ebp-4]
-	mov 	ecx, [eax]
+	mov     ecx, [ebp-16]
+	add 	ecx, [eax]
 	mov 	dword [ebp-16], ecx
 	add 	eax, 4
 	mov 	dword [ebp-4], eax
@@ -174,6 +175,9 @@ byte#Array:
 	dd	java.lang.Object
 	dd	0
 	
-	
+	global null
+null:
+	dd	0
+	dd	0
 	
 	

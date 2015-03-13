@@ -20,13 +20,14 @@ public class Main {
 
         if (args.length == 0) {
             a = new String[]{
+                    "-c",
                     //"-t",
                     //"-p",
                     //"-A",
                     //"-a",
-                    "-d", TEST_DIR + "Test2",
+                    //"-d", TEST_DIR + "Test3",
                     "-z","1",
-                    //TEST_DIR + "Je_6_Assignable_ValueReturn_InConstructor.java",
+                    TEST_DIR + "J1_7_Reachability_IfThenElse_InConstructor.java",
                     "-d", STDLIB_DIR + "2.0/java"
                     //TEST_DIR + "Test.java"
             };
@@ -59,6 +60,9 @@ public class Main {
                 switch (op) {
                     case 'C':
                         argList.useCygwin = true;
+                        break;
+                    case 'c':
+                        argList.commentAssembly = true;
                         break;
                     case 'a':
                         argList.flags = argList.flags & ArgList.FLAG_ZERO_PHASE | ((ArgList.FLAG_ANALYZE << 1) - 1);
@@ -166,6 +170,7 @@ public class Main {
         public int assignmentNumber;
 
         public boolean useCache = false;
+        public boolean commentAssembly = false;
 
         public ArgList() {}
 

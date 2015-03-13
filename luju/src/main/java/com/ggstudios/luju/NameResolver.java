@@ -446,7 +446,7 @@ public class NameResolver {
                 Class returnType = curMethod == null ?
                         curClass :
                         curMethod.getReturnType();
-                if (returnType != BaseEnvironment.TYPE_VOID && e == null) {
+                if (curMethod != null && returnType != BaseEnvironment.TYPE_VOID && e == null) {
                     throw new TypeException(curClass.getFileName(), returnStatement,
                             "Missing return value");
                 } else if (returnType == BaseEnvironment.TYPE_VOID && e != null) {
@@ -1140,20 +1140,28 @@ public class NameResolver {
                         c.getName(), overrides, i.getName()));
             }
 
+            int originalMethods = 0; // original methods are methods that are not overriden/inherited
             for (Method m : c.getDeclaredMethods()) {
                 // we only want to assign method ids to member methods that don't override anything
                 // all other method ids will be handled by the merge...
                 if (!Modifier.isStatic(m.getModifiers()) && m.getMethodId() == -1) {
+                    originalMethods++;
                     m.setMethodId(index++);
                     if (c.isInterface()) {
                         m.setInterfaceId(interf.getId());
                     }
                 }
             }
+            c.setNumOriginalMethods(originalMethods);
 
             int nonStaticMethodCount = 0;
             for (Class i : interfaces) {
-                c.addInterfaceIndex((Interface) i, index + nonStaticMethodCount);
+                try {
+                    c.addInterfaceIndex((Interface) i, index + nonStaticMethodCount);
+                } catch (ClassCastException e) {
+                    throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
+                            "Cannot implement class");
+                }
 
                 if (!i.isInterface()) {
                     throw new NameResolutionException(c.getFileName(), c.getClassDecl(),
