@@ -126,6 +126,13 @@ public class IntermediateSource {
                 .append(":\n");
     }
 
+    public void ddHex(String hex) {
+        getActiveSectionId()
+                .append("\tdd\t")
+                .append(hex)
+                .append("\n");
+    }
+
     public void dd(String labelValue) {
         linkLabel(labelValue);
         getActiveSectionId()
@@ -306,6 +313,24 @@ public class IntermediateSource {
                 .append('\n');
     }
 
+    public void movsx(Register r1, Register r2) {
+        getActiveSectionId()
+                .append("\tmovsx\t")
+                .append(r1.getAsm())
+                .append(", ")
+                .append(r2.getAsm())
+                .append('\n');
+    }
+
+    public void movzx(Register r1, Register r2) {
+        getActiveSectionId()
+                .append("\tmovzx\t")
+                .append(r1.getAsm())
+                .append(", ")
+                .append(r2.getAsm())
+                .append('\n');
+    }
+
     public void push(Register r) {
         bpOffset += 4;
         getActiveSectionId()
@@ -321,6 +346,14 @@ public class IntermediateSource {
         getActiveSectionId()
                 .append("\tpush\t")
                 .append(label)
+                .append('\n');
+    }
+
+    public void push(int val) {
+        bpOffset += 4;
+        getActiveSectionId()
+                .append("\tpush\t")
+                .append(val)
                 .append('\n');
     }
 
@@ -610,4 +643,5 @@ public class IntermediateSource {
     public void setBpOffset(int bpOffset) {
         this.bpOffset = bpOffset;
     }
+
 }

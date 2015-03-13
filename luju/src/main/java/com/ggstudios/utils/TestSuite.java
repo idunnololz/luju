@@ -63,23 +63,29 @@ public class TestSuite {
         Main.ArgList args = new Main.ArgList(defaultTestArgs);
         args.fileNames.add(testFile.getCanonicalPath());
 
+        int result = runTest(args);
+
         if (testFile.getName().startsWith("Je") || testFile.getName().startsWith("J1e")) {
             // this test should output an error...
-            if (runTest(args) == 0) {
+            if (result == 0) {
                 testFailed++;
                 System.out.println(String.format("[Fail] Erronous test %s", testFile.getName()));
-            } else {
+            } else if (result == 42) {
                 testPassed++;
                 System.out.println(String.format("[Pass] Erronous test %s", testFile.getName()));
+            } else {
+                throw new RuntimeException("Compiler did not return 0 or 42");
             }
         } else {
             // this test should pass...
-            if (runTest(args) == 0) {
+            if (result == 0) {
                 testPassed++;
                 System.out.println(String.format("[Pass] Correct test %s", testFile.getName()));
-            } else {
+            } else if (result == 42) {
                 testFailed++;
                 System.out.println(String.format("[Fail] Correct test %s", testFile.getName()));
+            } else {
+                throw new RuntimeException("Compiler did not return 0 or 42");
             }
         }
     }
@@ -93,23 +99,29 @@ public class TestSuite {
             args.fileNames.add(f.getCanonicalPath());
         }
 
+        int result = runTest(args);
+
         if (testDir.getName().startsWith("Je") || testDir.getName().startsWith("J1e")) {
             // this test should output an error...
-            if (runTest(args) == 0) {
+            if (result == 0) {
                 testFailed++;
                 System.out.println(String.format("[Fail] Erronous test %s", testDir.getName()));
-            } else {
+            } else if (result == 42) {
                 testPassed++;
                 System.out.println(String.format("[Pass] Erronous test %s", testDir.getName()));
+            } else {
+                throw new RuntimeException("Compiler did not return 0 or 42");
             }
         } else {
             // this test should pass...
-            if (runTest(args) == 0) {
+            if (result == 0) {
                 testPassed++;
                 System.out.println(String.format("[Pass] Correct test %s", testDir.getName()));
-            } else {
+            } else if (result == 42) {
                 testFailed++;
                 System.out.println(String.format("[Fail] Correct test %s", testDir.getName()));
+            } else {
+                throw new RuntimeException("Compiler did not return 0 or 42");
             }
         }
     }
@@ -127,9 +139,9 @@ public class TestSuite {
             res = compiler.compileWith(args);
         } catch (TestFailedException e) {
             if (e.getReturnCode() == 13) {
-                res = 1;
+                res = 42;
             } else {
-                res = 1;
+                res = 42;
                 Print.e("Invalid test return code of: " + e.getReturnCode());
             }
         }

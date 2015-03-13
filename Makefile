@@ -8,7 +8,7 @@ all:
 	$(GXX) -d $(BINDIR) @sources.txt
 
 zip:
-	rm luju.zip
+	rm -f luju.zip
 	mkdir -p zip_temp
 	cp -a --parents $(SRCDIR) zip_temp
 	cp Makefile zip_temp

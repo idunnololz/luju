@@ -25,7 +25,8 @@ public class Main {
                     //"-A",
                     //"-a",
                     "-d", TEST_DIR + "Test2",
-                    //TEST_DIR + "A.java",
+                    "-z","1",
+                    //TEST_DIR + "Je_6_Assignable_ValueReturn_InConstructor.java",
                     "-d", STDLIB_DIR + "2.0/java"
                     //TEST_DIR + "Test.java"
             };

@@ -1,1 +1,1 @@
-java -cp bin com.ggstudios.luju.Main -a "$@"
+java -cp bin com.ggstudios.luju.Main -a -z 1 "$@"

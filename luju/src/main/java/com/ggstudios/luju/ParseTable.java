@@ -97,8 +97,6 @@ public class ParseTable {
                             Integer.valueOf(toks[3]));
                 }
             }
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         } finally {

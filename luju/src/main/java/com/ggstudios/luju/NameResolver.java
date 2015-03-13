@@ -67,6 +67,7 @@ public class NameResolver {
     private Class curClass;
     private boolean inStaticContext = false;
     private boolean checkingFields = false;
+    private Constructor curConstructor;
     private Method curMethod;
     private Field curField;
     private AstNode lastNode;
@@ -249,6 +250,8 @@ public class NameResolver {
 
                 // Constructors are always non-static
                 for (ConstructorDecl cd : cDecl.getConstructorDeclaration()) {
+                    curConstructor = cd.getCProper();
+
                     staticAnalyzer.resetState();
                     inStaticContext = false;
                     Environment curEnv = env;
@@ -297,6 +300,8 @@ public class NameResolver {
                 }
             }
 
+            curConstructor = null;
+
             for (MethodDecl meth : typeDecl.getMethodDeclarations()) {
                 staticAnalyzer.resetState();
                 inStaticContext = Modifier.isStatic(meth.getModifiers());
@@ -341,6 +346,8 @@ public class NameResolver {
                                     curMethod.getName()));
                 }
             }
+
+            curMethod = null;
         }
         Environment.turnOffHints();
     }
@@ -436,7 +443,9 @@ public class NameResolver {
                 staticAnalyzer.analyzeReachability(returnStatement);
 
                 Expression e = returnStatement.getExpression();
-                Class returnType = curMethod.getReturnType();
+                Class returnType = curMethod == null ?
+                        curClass :
+                        curMethod.getReturnType();
                 if (returnType != BaseEnvironment.TYPE_VOID && e == null) {
                     throw new TypeException(curClass.getFileName(), returnStatement,
                             "Missing return value");
@@ -445,9 +454,9 @@ public class NameResolver {
                             "Cannot return a value from a method with void result type");
                 } else if (e != null) {
                     Class type = resolveExpression(e, env);
-                    if (!Class.isValidAssign(curMethod.getReturnType(), type)) {
+                    if (!Class.isValidAssign(returnType, type)) {
                         throw new IncompatibleTypeException(curClass.getFileName(), returnStatement,
-                                curMethod.getReturnType(), type);
+                                returnType, type);
                     }
                 }
                 break;
@@ -456,7 +465,9 @@ public class NameResolver {
                 VarDecl vd = (VarDecl) s;
                 staticAnalyzer.analyzeReachability(vd);
 
-                Variable var = new Variable(curMethod, vd, env);
+                Variable var = curMethod == null ?
+                        new Variable(curConstructor, vd, env) :
+                        new Variable(curMethod, vd, env);
                 env = new LocalVariableEnvironment(var.getName(), var, env);
                 if (vd instanceof VarInitDecl) {
                     VarInitDecl vid = (VarInitDecl) vd;
@@ -1061,7 +1072,6 @@ public class NameResolver {
             toResolve.add(c);
         }
 
-        int objectMethods = 0;
         if (classes.size() != 0) {
             BaseEnvironment.TYPE_OBJECT.setIsComplete(true);
 
@@ -1072,7 +1082,6 @@ public class NameResolver {
                 }
             }
             BaseEnvironment.TYPE_OBJECT.setNumUniqueMethods(i);
-            objectMethods = i;
         }
 
         while (!toResolve.isEmpty()) {
@@ -1125,13 +1134,15 @@ public class NameResolver {
 
             for (Class i : interfaces) {
                 int overrides = getMarkInterfaceMethods(c, i);
-                index -= overrides;
+                //index += i.getDeclaredMethods().size();
 
                 Print.ln(String.format("Class '%s' overrides %d methods from '%s'",
                         c.getName(), overrides, i.getName()));
             }
 
             for (Method m : c.getDeclaredMethods()) {
+                // we only want to assign method ids to member methods that don't override anything
+                // all other method ids will be handled by the merge...
                 if (!Modifier.isStatic(m.getModifiers()) && m.getMethodId() == -1) {
                     m.setMethodId(index++);
                     if (c.isInterface()) {
@@ -1199,7 +1210,10 @@ public class NameResolver {
                                         oldMeth.getHumanReadableSignature(), oldMeth.getDeclaringClass().getCanonicalName()));
                     } else if (Modifier.isPublic(oMods) && Modifier.isProtected(nMods)) {
                         if (Modifier.isAbstract(oMods) && Modifier.isAbstract(nMods) && newMeth.getDeclaringClass() != c) {
-                            c.put(entry.getKey(), oldMeth);
+                            Method copy = new Method(oldMeth);
+                            Interface i = Interface.getInterfaceForId(oldMeth.getInterfaceId());
+                            copy.setMethodId(oldMeth.getMethodIndex() + c.getInterfaceIndex(i));
+                            c.put(entry.getKey(), copy);
                         } else {
                             throw new NameResolutionException(c.getFileName(), newMeth.getMethodDecl(),
                                     String.format("'%s' in '%s' clashes with '%s' in '%s'; attempting to assign weaker access privileges",
@@ -1231,7 +1245,9 @@ public class NameResolver {
                     newMeth.setOverrideMethod(oldMeth);
                     if (oldMeth.isInterfaceMethod()) {
                         Interface i = Interface.getInterfaceForId(oldMeth.getInterfaceId());
-                        newMeth.setMethodId(oldMeth.getMethodIndex() + c.getInterfaceIndex(i));
+                        if (i != null) {
+                            newMeth.setMethodId(oldMeth.getMethodIndex() + c.getInterfaceIndex(i));
+                        }
                     } else {
                         newMeth.setMethodId(oldMeth.getMethodId());
                     }

@@ -45,7 +45,6 @@ public class LuJuCompiler {
         executor = Executors.newFixedThreadPool(maxThreads);
         workerPool = new WorkerPool(maxThreads * 2);
 
-
         Assembler.Builder builder = new Assembler.Builder();
         try {
             assembler = builder.setTargetOs(Assembler.Os.WINDOWS)
@@ -122,7 +121,7 @@ public class LuJuCompiler {
         }
 
         if (args.isGenerateCode()) {
-            codeGenerator.generateCode(args.useCache, ast, assembler);
+            codeGenerator.generateCode(ast, assembler);
         }
 
         return RETURN_CODE_SUCCESS;

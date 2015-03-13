@@ -225,8 +225,19 @@ public class Class extends HashMap<String, Object> {
 
     private static final HashMap<Class, Integer> classToCategory = new HashMap<>();
     private static final HashMap<Class, Integer> classToLevel = new HashMap<>();
+    private static final HashMap<Class, Integer> classToSize = new HashMap<>();
     public static final int CATEGORY_NUMBER = 0x00000001;
     private static final int CATEGORY_BOOLEAN = 0x00000002;
+
+    public static int getPrimitiveSize(Class c) {
+        if (classToSize.size() == 0) {
+            classToSize.put(BaseEnvironment.TYPE_BYTE,     1);
+            classToSize.put(BaseEnvironment.TYPE_CHAR,     2);
+            classToSize.put(BaseEnvironment.TYPE_SHORT,    2);
+            classToSize.put(BaseEnvironment.TYPE_INT,      4);
+        }
+        return MapUtils.getOrDefault(classToSize, c, 4);
+    }
 
     private static int getPrimitiveLevel(Class c) {
         if (classToLevel.size() == 0) {
@@ -354,7 +365,11 @@ public class Class extends HashMap<String, Object> {
     }
 
     public int getInterfaceIndex(Interface i) {
-        return interfaceToIndex.get(i);
+        Integer index;
+        if ((index = interfaceToIndex.get(i)) == null) {
+            throw new RuntimeException("Could not find index for interface: " + i.getCanonicalName());
+        }
+        return index;
     }
 
     private List<Field> completeFieldList;

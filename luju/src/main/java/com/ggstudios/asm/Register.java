@@ -10,7 +10,12 @@ public enum Register {
     EDX(3, "edx"),
 
     EBP(0x10, "ebp"),
-    ESP(0x11, "esp");
+    ESP(0x11, "esp"),
+
+    AX(0x20, "ax"),
+    AL(0x21, "al"),
+    BX(0x22, "bx"),
+    BL(0x23, "bl");
 
     private static final Map<Integer, Register> intToTypeMap = new HashMap<Integer, Register>();
     static {

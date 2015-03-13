@@ -9,6 +9,7 @@ import com.ggstudios.env.BaseEnvironment;
 import com.ggstudios.env.Class;
 import com.ggstudios.env.Constructor;
 import com.ggstudios.env.Field;
+import com.ggstudios.env.Interface;
 import com.ggstudios.env.Literal;
 import com.ggstudios.env.Method;
 import com.ggstudios.env.Modifier;
@@ -71,7 +72,7 @@ public class CodeGenerator {
 
     private List<String> classLoaders;
 
-    public void generateCode(boolean useCache, Ast ast, Assembler assembler) {
+    public void generateCode(Ast ast, Assembler assembler) {
         // Strategy for generating our sources
         // 1. For each class:
         // 2.   Generate class information. Write into .data section
@@ -326,12 +327,14 @@ public class CodeGenerator {
         } else {
             for (Method m : c.getCompleteNonStaticMethodList()) {
                 if (m == null) {
-                    throw new RuntimeException("Wtf. Class: " + c.getCanonicalName());
-                }
-                if (Modifier.isAbstract(m.getModifiers())) {
-                    throw new RuntimeException("Abstract method in non abstract class");
+                    curSrc.ddHex("0DEADBEEFh");
+                    //throw new RuntimeException("Wtf. Class: " + c.getCanonicalName());
                 } else {
-                    curSrc.dd(m.getUniqueName());
+                    if (Modifier.isAbstract(m.getModifiers())) {
+                        throw new RuntimeException("Abstract method in non abstract class");
+                    } else {
+                        curSrc.dd(m.getUniqueName());
+                    }
                 }
             }
         }
@@ -981,11 +984,7 @@ public class CodeGenerator {
             }
             case Expression.REFERENCE_TYPE: {
                 ReferenceType refType = (ReferenceType) ex;
-                Class type = refType.getProper();
-                String l = type.getUniqueLabel();
-                curSrc.linkLabel(l);
-                curSrc.mov(Register.EAX, l);
-                return Register.EAX;
+                return loadReferenceType(refType, Register.EAX);
             }
             case Expression.THIS_EXPRESSION: {
                 curSrc.movRef(Register.EAX, getThisField());
@@ -993,11 +992,13 @@ public class CodeGenerator {
             }
             case Expression.UNARY_EXPRESSION: {
                 UnaryExpression unary = (UnaryExpression) ex;
-                Register r = generateCodeForExpression(unary.getExpression());
                 if (unary instanceof CastExpression) {
-                    // TODO
-                   return r;
+                    CastExpression ce = (CastExpression) unary;
+
+                    return generateCodeForCastExpression(ce);
                 }
+
+                Register r = generateCodeForExpression(unary.getExpression());
 
                 switch (unary.getOp().getType()) {
                     case NOT:
@@ -1032,6 +1033,88 @@ public class CodeGenerator {
         }
     }
 
+    private Register generateCodeForCastExpression(CastExpression ce) {
+        // One important thing to note about casts is that casting a null to a type is ok...
+        // There are a few cases we need to handle...
+        // Casting to SERIALIZABLE or CLONEABLE does nothing...
+        // Casting a class/interface to itself does nothing...
+        // Casting from one class to another class does nothing...
+        // Casting from a primitive type to a primitive type may require attention
+        // especially when casting from a larger type to a smaller one
+        // Casting from an Interface to a Class/Interface requires attention
+        // Casting from a Class to an Interface requires attention
+
+        Class castTo = ce.getClassType();
+        Class castFrom = ce.getExpression().getClassType();
+
+        Register r1 = generateCodeForExpression(ce.getExpression());
+        if (r1 != Register.EAX) {
+            curSrc.mov(Register.EAX, r1);
+        }
+
+        if (castTo.isPrimitive()) {
+            // special case!
+            int newSize = Class.getPrimitiveSize(castTo);
+            int oldSize = Class.getPrimitiveSize(castFrom);
+
+            if (newSize > oldSize) {
+                return r1;
+            } else {
+                if (castTo == BaseEnvironment.TYPE_CHAR) {
+                    curSrc.movzx(r1, Register.AX);
+                } else if (newSize == 2) {
+                    curSrc.movsx(r1, Register.AX);
+                } else if (newSize == 1) {
+                    curSrc.movsx(r1, Register.AL);
+                }
+            }
+            return r1;
+        }
+
+        if (castTo == BaseEnvironment.TYPE_SERIALIZABLE ||
+                castTo == BaseEnvironment.TYPE_CLONEABLE ||
+                castTo == ce.getExpression().getClassType() ||
+                (!castTo.isInterface() && !ce.getExpression().getClassType().isInterface())) {
+            return r1;
+        }
+
+        Register r2 = loadReferenceType(ce.getClassType(), Register.EBX);
+
+        RegisterExpression re = new RegisterExpression();
+
+        String doCast = curSrc.getFreshLabel();
+        String exit = curSrc.getFreshLabel();
+
+        curSrc.test(r1, r1);
+        curSrc.je(exit);
+
+        curSrc.push(r1);
+        curSrc.push(0);
+        curSrc.push(r2);
+
+        curSrc.mov(r1, String.format("[%s]", r1));
+        curSrc.push(r1);
+        curSrc.call("__checkCast");
+        curSrc.add(Register.ESP, 12);
+        curSrc.cmp(Register.EAX, -1);
+        curSrc.jne(doCast);
+        curSrc.call("__exception");
+
+        curSrc.label(doCast);
+        curSrc.pop(Register.EBX);
+        re.set(Register.EBX);
+        curSrc.movRef(Register.ECX, re);
+        re.set(Register.ECX);
+        curSrc.movRef(Register.ECX, re);
+        curSrc.add(Register.ECX, Register.EAX);
+        re.set(Register.EBX, Operator.PLUS, 4);
+        curSrc.movRef(re, Register.ECX);
+        curSrc.mov(r1, Register.EBX);
+
+        curSrc.label(exit);
+        return r1;
+    }
+
     public Register createInstance(Class c, Constructor constructor, List<Expression> args) {
         pushArguments(args, constructor.getParameterTypes());
 
@@ -1058,6 +1141,18 @@ public class CodeGenerator {
             Register r = generateCodeForExpression(e);
             curSrc.push(r);
         }
+    }
+
+    public Register loadReferenceType(ReferenceType refType, Register r) {
+        return loadReferenceType(refType.getProper(), r);
+    }
+
+    public Register loadReferenceType(Class type, Register r) {
+        String l = type.getUniqueLabel();
+        curSrc.linkLabel(l);
+        curSrc.mov(r, l);
+
+        return r;
     }
 
     /**
